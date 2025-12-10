@@ -1,0 +1,73 @@
+/* Basic reset & layout */
+.cc-wrapper { font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color: #111; }
+.cc-header { display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-bottom:1px solid #e6e6e6; background:#fff; }
+.cc-header .left { display:flex; align-items:center; gap:10px; }
+.title { font-size:16px; margin:0; }
+.icon-btn { display:inline-flex; align-items:center; justify-content:center; padding:6px; border-radius:6px; border:1px solid transparent; background:transparent; cursor:pointer; }
+.icon-btn:hover { background:#f3f4f6; }
+.mobile-menu { display:none; }
+
+/* Grid: sidebar + main */
+.cc-grid { display:grid; grid-template-columns:320px 1fr; height: calc(100vh - 52px); }
+
+/* Sidebar */
+.cc-sidebar { background:#fff; border-right:1px solid #e6e6e6; padding:16px; overflow:auto; }
+.sidebar-inner h2 { margin:0 0 8px 0; font-size:15px; }
+.label { display:block; margin-top:12px; font-size:13px; color:#333; margin-bottom:6px; }
+.select, .input, .range { width:100%; padding:8px; border:1px solid #ddd; border-radius:6px; font-size:14px; box-sizing:border-box; }
+.small { font-size:12px; color:#666; margin-top:6px; }
+.draft-row { display:flex; gap:8px; align-items:center; margin-top:6px; }
+.btn { display:inline-flex; gap:8px; align-items:center; padding:8px 10px; border-radius:6px; border: none; cursor:pointer; background:#111; color:#fff; }
+.btn.outline { background:transparent; border:1px solid #ddd; color:#111; }
+.btn.danger { background:#f43f5e; color:white; }
+.btn.primary { background:#4a6cf7; color:white; }
+.btn.small { padding:6px; font-size:13px; }
+.draft-list { margin-top:10px; max-height:180px; overflow:auto; }
+.draft-item { display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border-radius:6px; background:#fafafa; margin-bottom:6px; }
+.draft-name { font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:170px; }
+.draft-actions { display:flex; gap:6px; align-items:center; }
+.link-btn { background:none; border:none; color:#ef4444; cursor:pointer; font-size:13px; }
+
+/* Tip */
+.tip { font-size:12px; color:#6b7280; margin-top:12px; }
+
+/* Main */
+.cc-main { padding:16px; background:linear-gradient(180deg, #fff, #fbfbfb); }
+.conversation-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.muted { color:#6b7280; font-size:13px; margin:0; }
+
+/* Messages */
+.messages { background:transparent; padding:8px; overflow:auto; height: calc(100% - 180px); }
+.msg { max-width:75%; padding:10px 12px; border-radius:10px; margin-bottom:10px; position:relative; display:flex; align-items:center; gap:8px; }
+.msg.user { margin-left:auto; background:#4a6cf7; color:white; }
+.msg.assistant { margin-right:auto; background:#f1f5f9; color:#111; }
+.msg-actions { margin-left:8px; display:flex; gap:6px; }
+
+/* Composer */
+.composer { display:flex; gap:12px; margin-top:12px; align-items:flex-end; }
+.composer-input { flex:1; padding:10px; border-radius:8px; border:1px solid #ddd; resize:vertical; min-height:60px; font-size:14px; }
+.composer-right { display:flex; flex-direction:column; gap:8px; min-width:220px; align-items:flex-end; }
+.quick-btns { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
+.quick { font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid #eee; background:#fafafa; cursor:pointer; }
+
+/* small icon button */
+.icon-btn.tiny { padding:4px; border-radius:6px; }
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .cc-grid { grid-template-columns: 1fr; height: calc(100vh - 52px); }
+  .cc-sidebar { position:fixed; left:-320px; top:52px; width:320px; height: calc(100% - 52px); transition: left .25s ease; z-index:40; box-shadow: 2px 0 12px rgba(0,0,0,0.06); }
+  .cc-grid.sidebar-open .cc-sidebar { left:0; }
+  .mobile-menu { display:inline-flex; }
+  .composer-right { min-width: auto; width:100%; align-items:stretch; }
+  .composer { flex-direction:column; }
+  .messages { height: calc(100% - 260px); }
+}
+
+/* very small devices */
+@media (max-width: 420px) {
+  .draft-name { max-width:120px; }
+  .cc-header { padding:8px; }
+  .title { font-size:15px; }
+  .icon-btn { padding:4px; }
+}
