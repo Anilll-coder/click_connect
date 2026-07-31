@@ -1,0 +1,10 @@
+#env
+*.env
+#database
+*.db
+#virtual environment
+venv/
+#pycache
+__pycache__
+#static files
+static/
