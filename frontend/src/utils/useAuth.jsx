@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { API_BASE } from "./helpers";
 
 export default function useAuth() {
   const [user, setUser] = useState(null);
@@ -13,7 +14,7 @@ export default function useAuth() {
     }
 
     try {
-      const res = await fetch("http://localhost:8000/auth/me", {
+      const res = await fetch(`${API_BASE}/auth/me`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

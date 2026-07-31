@@ -15,6 +15,7 @@ import {
   Ghost,
   Wand2,
 } from "lucide-react";
+import { API_BASE } from "../utils/helpers";
 
 const MAX_AVATAR_MB = 10;
 const MAX_AVATAR_BYTES = MAX_AVATAR_MB * 1024 * 1024;
@@ -98,7 +99,7 @@ export default function Auth() {
 
     try {
       if (mode === "login") {
-        const res = await fetch(`http://localhost:8000/auth/login`, {
+        const res = await fetch(`${API_BASE}/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email_or_username: values.email.trim(), password: values.password }),
@@ -122,7 +123,7 @@ export default function Auth() {
         fd.append("password", values.password);
         if (avatarFile) fd.append("avatar", avatarFile);
 
-        const res = await fetch(`http://localhost:8000/auth/signup`, {
+        const res = await fetch(`${API_BASE}/auth/signup`, {
           method: "POST",
           body: fd,
         });

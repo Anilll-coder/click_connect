@@ -1,4 +1,4 @@
-export const API_BASE = "http://localhost:8000";
+export const API_BASE = "https://click-connect-4h1o.onrender.com";
 
 export function getAuthToken() {
   return localStorage.getItem("cc_token");
