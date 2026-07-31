@@ -4,7 +4,6 @@ from sqlalchemy.orm import sessionmaker
 from configuration.config import settings
 
 DATABASE_URL = settings.database_url
-print(f"Using database URL: {DATABASE_URL}")
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
         DATABASE_URL,
