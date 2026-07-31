@@ -24,8 +24,8 @@ function App() {
               <Route path='/notifications' element={<Layout><ProtectedRoute><NotificationsPage/></ProtectedRoute></Layout>}/>
               <Route path='/settings' element={<Layout><ProtectedRoute><SettingsPage/></ProtectedRoute></Layout>}/>
               <Route path='/user/:username' element={<Layout><UserProfilePage/></Layout>}/>
-              <Route path='/myposts' element={<Layout><MyPosts/></Layout>}/>
-              <Route path='/create' element={<Layout><PostCreator/></Layout>}/>
+              <Route path='/myposts' element={<Layout><ProtectedRoute><MyPosts/></ProtectedRoute></Layout>}/>
+              <Route path='/create' element={<Layout><ProtectedRoute><PostCreator/></ProtectedRoute></Layout>}/>
               <Route path='/post/:id' element={<Layout><PostView/></Layout>}/>
               <Route path='/login' element={<AuthPage/>}/>
               <Route path='/bot' element={<Layout><ClickConnectChatbot/></Layout>}/>

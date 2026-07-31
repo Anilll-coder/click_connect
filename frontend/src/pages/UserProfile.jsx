@@ -1,8 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import { FileText, Mail, CalendarDays } from "lucide-react";
 import PostCard from "../components/PostCard";
+import PostModal from "../components/PostModal";
+import { API_BASE, getAuthToken, isLoggedIn, resolveAsset } from "../utils/helpers";
+import { EmptyState, PostSkeleton } from "../components/ui";
 
-const API_BASE = "http://localhost:8000";
 const PAGE_LIMIT = 12;
 
 export default function UserProfilePage() {
@@ -13,16 +17,15 @@ export default function UserProfilePage() {
   const [skip, setSkip] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
 
-  // comments state
   const [commentsMap, setCommentsMap] = useState({});
   const [openCommentsFor, setOpenCommentsFor] = useState(null);
   const [commentInputs, setCommentInputs] = useState({});
   const [commentSubmitting, setCommentSubmitting] = useState({});
+  const [selectedPost, setSelectedPost] = useState(null);
 
-  const token = localStorage.getItem("cc_token");
-  const isLoggedIn = Boolean(token);
+  const token = getAuthToken();
+  const authenticated = isLoggedIn();
 
-  // Fetch User Profile
   async function fetchUserProfile() {
     try {
       const res = await fetch(`${API_BASE}/auth/user/${username}`);
@@ -35,68 +38,44 @@ export default function UserProfilePage() {
     }
   }
 
-  // Fetch Initial Posts
   async function fetchInitial() {
     setLoading(true);
     try {
-      const headers = {};
-      const tokenLocal = localStorage.getItem("cc_token");
-      if (tokenLocal) headers.Authorization = `Bearer ${tokenLocal}`;
-
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await fetch(`${API_BASE}/posts/user/${username}?skip=0&limit=${PAGE_LIMIT}`, { headers });
       if (res.status === 401) {
         localStorage.removeItem("cc_token");
         return fetchInitial();
       }
-      if (!res.ok) {
-        const t = await res.text();
-        console.error("fetchInitial failed:", t);
-        throw new Error(t || "Failed to fetch posts");
-      }
-
+      if (!res.ok) throw new Error("Failed to fetch posts");
       const body = await res.json();
-      console.log("fetchInitial body:", body);
-
-      let postsArr = Array.isArray(body) ? body : [];
+      const postsArr = Array.isArray(body) ? body : [];
       setPosts(postsArr);
       setSkip(postsArr.length);
     } catch (err) {
       console.error("fetchInitial error:", err);
-      alert("Failed to load user posts.");
     } finally {
       setLoading(false);
     }
   }
 
-  // Load More
   async function loadMore() {
     if (loadingMore) return;
     setLoadingMore(true);
     try {
-      const headers = {};
-      const tokenLocal = localStorage.getItem("cc_token");
-      if (tokenLocal) headers.Authorization = `Bearer ${tokenLocal}`;
-
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await fetch(`${API_BASE}/posts/user/${username}?skip=${skip}&limit=${PAGE_LIMIT}`, { headers });
       if (res.status === 401) {
         localStorage.removeItem("cc_token");
         return loadMore();
       }
-      if (!res.ok) {
-        const t = await res.text();
-        console.error("loadMore failed:", t);
-        throw new Error(t || "Failed to load more");
-      }
-
+      if (!res.ok) throw new Error("Failed to load more");
       const body = await res.json();
-      console.log("loadMore body:", body);
-
-      let newPosts = Array.isArray(body) ? body : [];
+      const newPosts = Array.isArray(body) ? body : [];
       setPosts((p) => [...p, ...newPosts]);
       setSkip((s) => s + newPosts.length);
     } catch (err) {
       console.error("loadMore error:", err);
-      alert("Failed to load more posts.");
     } finally {
       setLoadingMore(false);
     }
@@ -108,69 +87,46 @@ export default function UserProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
-  // Like Toggle
   const toggleLike = useCallback(
     async (postId) => {
-      if (!isLoggedIn) {
-        alert("Login to like posts.");
-        return;
-      }
+      if (!authenticated) return;
       try {
         const res = await fetch(`${API_BASE}/interactions/like/${postId}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) {
-          const t = await res.text();
-          console.error("toggleLike failed:", t);
-          throw new Error(t || "Failed to toggle like");
-        }
+        if (!res.ok) throw new Error("Failed to toggle like");
         const data = await res.json();
-        if (!data || typeof data.liked === "undefined") {
-          console.error("toggleLike: unexpected response", data);
-          throw new Error("Unexpected toggle response");
+        if (data && typeof data.liked !== "undefined") {
+          setPosts((prev) =>
+            prev.map((p) =>
+              p.id === postId
+                ? { ...p, liked_by_current_user: data.liked, likes_count: data.likes_count }
+                : p
+            )
+          );
         }
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, liked_by_current_user: data.liked, likes_count: data.likes_count }
-              : p
-          )
-        );
       } catch (err) {
         console.error("toggleLike error:", err);
-        alert("Could not update like — try again.");
       }
     },
-    [token, isLoggedIn]
+    [token, authenticated]
   );
 
-  // COMMENTS: fetch, open, submit
   async function fetchComments(postId, more = false) {
     setCommentsMap((m) => ({ ...(m || {}), [postId]: { ...(m?.[postId] || {}), loading: true } }));
-
     const current = commentsMap[postId] || { items: [], skip: 0 };
-    const skipVal = more ? (current.skip || current.items.length || 0) : 0;
+    const skipVal = more ? current.skip || current.items.length || 0 : 0;
 
     try {
-      const headers = {};
-      const tokenLocal = localStorage.getItem("cc_token");
-      if (tokenLocal) headers.Authorization = `Bearer ${tokenLocal}`;
-
-      const res = await fetch(`${API_BASE}/interactions/comments/${postId}?skip=${skipVal}&limit=20`, { headers });
-      console.log("fetchComments status:", res.status, "postId:", postId);
-      if (!res.ok) {
-        const t = await res.text();
-        console.error("fetchComments failed:", t);
-        throw new Error(t || "Failed to fetch comments");
-      }
-
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(
+        `${API_BASE}/interactions/comments/${postId}?skip=${skipVal}&limit=20`,
+        { headers }
+      );
+      if (!res.ok) throw new Error("Failed to fetch comments");
       const data = await res.json();
-      console.log("fetchComments body:", data);
-      if (!Array.isArray(data)) {
-        console.error("fetchComments: unexpected response", data);
-        throw new Error("Unexpected comments response shape");
-      }
+      if (!Array.isArray(data)) throw new Error("Unexpected comments response");
 
       setCommentsMap((m) => {
         const prev = m?.[postId] || { items: [], skip: 0 };
@@ -195,133 +151,170 @@ export default function UserProfilePage() {
     if (!commentsMap[postId]) fetchComments(postId, false);
   }
 
-  async function submitComment(postId) {
-    if (!isLoggedIn) {
-      alert("Please login to comment.");
-      return;
-    }
+  function openPostModal(post) {
+    setSelectedPost(post);
+    setOpenCommentsFor(post.id);
+    if (post.comments_count > 0 && !commentsMap[post.id]) fetchComments(post.id, false);
+  }
 
+  function closePostModal() {
+    setSelectedPost(null);
+    setOpenCommentsFor(null);
+  }
+
+  async function submitComment(postId) {
+    if (!authenticated) return;
     const text = (commentInputs[postId] || "").trim();
-    if (!text) return;
-    if (commentSubmitting[postId]) return;
+    if (!text || commentSubmitting[postId]) return;
 
     setCommentSubmitting((s) => ({ ...(s || {}), [postId]: true }));
-
     try {
-      const headers = { "Content-Type": "application/json" };
-      const tokenLocal = localStorage.getItem("cc_token");
-      if (tokenLocal) headers.Authorization = `Bearer ${tokenLocal}`;
-
       const res = await fetch(`${API_BASE}/interactions/comment/${postId}`, {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ text }),
       });
-
-      console.log("submitComment status:", res.status, "postId:", postId);
-      if (!res.ok) {
-        let errBody = null;
-        try { errBody = await res.json(); } catch (_) { errBody = await res.text().catch(() => null); }
-        console.error("submitComment failed:", errBody);
-        throw new Error((errBody && (errBody.detail || errBody.message)) || `Failed to post comment (status ${res.status})`);
-      }
-
+      if (!res.ok) throw new Error("Failed to post comment");
       const created = await res.json();
-      console.log("submitComment body:", created);
-      if (!created || !created.id) {
-        console.error("submitComment: unexpected response", created);
-        throw new Error("Unexpected comment response from server");
-      }
+      if (!created || !created.id) throw new Error("Unexpected comment response");
 
       setCommentsMap((m) => {
         const prev = m?.[postId] || { items: [], skip: 0 };
-        const newItems = [...(prev.items || []), created];
         return {
           ...m,
           [postId]: {
-            items: newItems,
+            items: [...(prev.items || []), created],
             skip: (prev.skip || prev.items.length || 0) + 1,
             loading: false,
             more: prev.more || false,
           },
         };
       });
-
-      setPosts((p) => p.map((post) => (post.id === postId ? { ...post, comments_count: (post.comments_count || 0) + 1 } : post)));
-
+      setPosts((p) =>
+        p.map((post) => (post.id === postId ? { ...post, comments_count: (post.comments_count || 0) + 1 } : post))
+      );
       setCommentInputs((c) => ({ ...(c || {}), [postId]: "" }));
     } catch (err) {
       console.error("submitComment error:", err);
-      alert(err.message || "Could not add comment.");
     } finally {
       setCommentSubmitting((s) => ({ ...(s || {}), [postId]: false }));
     }
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-6 space-y-6">
-      {/* User Header */}
+    <div className="page">
+      {/* Profile header */}
       {userInfo && (
-        <div className="bg-gradient-to-r from-indigo-600 to-purple-500 text-white p-6 rounded-xl shadow-lg">
-          <div className="flex items-center gap-4">
-            <img
-              src={userInfo.avatar_url ? `${API_BASE}${userInfo.avatar_url}` : "/profile-picture.png"}
-              alt={userInfo.username}
-              className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md"
-            />
-            <div>
-              <h1 className="text-2xl font-bold">{userInfo.username}</h1>
-              <p className="text-indigo-100">{posts.length} public posts</p>
-              {userInfo.bio && <p className="text-indigo-50 mt-1 text-sm">{userInfo.bio}</p>}
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative"
+        >
+          <div className="h-28 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 via-sky-500 to-cyan-400 sm:h-32" />
+          <div className="relative px-2 sm:px-3">
+            <div className="-mt-14 flex items-end justify-between sm:-mt-16">
+              <img
+                src={resolveAsset(userInfo.avatar_url)}
+                alt={userInfo.username}
+                className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-xl dark:border-slate-800 sm:h-28 sm:w-28"
+              />
+            </div>
+            <div className="mt-4">
+              <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">
+                {userInfo.username}
+              </h1>
+              <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500 dark:text-gray-400">
+                <span className="flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                  {posts.length} public {posts.length === 1 ? "post" : "posts"}
+                </span>
+                {userInfo.email && (
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    {userInfo.email}
+                  </span>
+                )}
+                {userInfo.created_at && (
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="h-4 w-4 text-gray-400 dark:text-gray-500" />
+                    Joined {new Date(userInfo.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                  </span>
+                )}
+              </div>
+              {userInfo.bio && (
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-gray-600 dark:text-gray-300">{userInfo.bio}</p>
+              )}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
+      {/* Posts */}
       {loading ? (
-        <div className="flex justify-center items-center py-10">
-          <svg className="animate-spin h-8 w-8 text-fuchsia-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-          <p className="text-lg text-gray-600 font-medium">Loading posts...</p>
+        <div className="space-y-5">
+          <PostSkeleton />
+          <PostSkeleton />
         </div>
       ) : posts.length === 0 ? (
-        <div className="text-center py-10 bg-white rounded-xl shadow-md border border-gray-100">
-          <p className="text-xl text-gray-600 font-medium mb-2">No public posts yet! 📭</p>
-          <p className="text-gray-500">This user hasn't shared any public posts.</p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No public posts yet"
+          message={`${userInfo?.username || "This user"} hasn't shared any public posts.`}
+        />
       ) : (
-        posts.map((p) => (
-          <PostCard 
-            key={p.id} 
-            post={p} 
-            commentsMap={commentsMap}
-            openCommentsFor={openCommentsFor}
-            commentInputs={commentInputs}
-            commentSubmitting={commentSubmitting}
-            isLoggedIn={isLoggedIn}
-            toggleLike={toggleLike}
-            openComments={openComments}
-            submitComment={submitComment}
-            fetchComments={fetchComments}
-            setCommentInputs={setCommentInputs}
-          />
-        ))
+        <div className="space-y-5">
+          {posts.map((p) => (
+            <PostCard
+              key={p.id}
+              post={p}
+              commentsMap={commentsMap}
+              openCommentsFor={openCommentsFor}
+              commentInputs={commentInputs}
+              commentSubmitting={commentSubmitting}
+              isLoggedIn={authenticated}
+              toggleLike={toggleLike}
+              openComments={openComments}
+              submitComment={submitComment}
+              fetchComments={fetchComments}
+              setCommentInputs={setCommentInputs}
+              onOpen={openPostModal}
+            />
+          ))}
+        </div>
       )}
 
-      {/* LOAD MORE */}
-      <div className="text-center py-4">
-        {posts.length > 0 && posts.length >= PAGE_LIMIT && (
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full shadow-md"
-          >
-            {loadingMore ? "Loading..." : "Load More Posts"}
+      {!loading && posts.length > 0 && posts.length >= PAGE_LIMIT && (
+        <div className="flex flex-col items-center gap-3 py-4">
+          <button onClick={loadMore} disabled={loadingMore} className="btn-secondary min-w-44">
+            {loadingMore ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 dark:border-slate-600 border-t-blue-500" />
+                Loading...
+              </>
+            ) : (
+              "Load More Posts"
+            )}
           </button>
-        )}
-        {posts.length > 0 && posts.length === skip && !loadingMore && (
-          <p className="text-gray-500 text-sm mt-3">You've reached the end!</p>
-        )}
-      </div>
+          {posts.length === skip && !loadingMore && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">You've reached the end!</p>
+          )}
+        </div>
+      )}
+
+      <PostModal
+        post={selectedPost}
+        onClose={closePostModal}
+        commentsMap={commentsMap}
+        openCommentsFor={openCommentsFor}
+        commentInputs={commentInputs}
+        commentSubmitting={commentSubmitting}
+        isLoggedIn={authenticated}
+        toggleLike={toggleLike}
+        openComments={openComments}
+        submitComment={submitComment}
+        fetchComments={fetchComments}
+        setCommentInputs={setCommentInputs}
+      />
     </div>
   );
 }

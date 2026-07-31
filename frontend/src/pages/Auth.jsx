@@ -2,11 +2,29 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, Upload, X, Sparkles, Lock, Mail, User } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  Upload,
+  X,
+  Sparkles,
+  Lock,
+  Mail,
+  User,
+  ShieldCheck,
+  Ghost,
+  Wand2,
+} from "lucide-react";
 
 const MAX_AVATAR_MB = 10;
 const MAX_AVATAR_BYTES = MAX_AVATAR_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+const features = [
+  { icon: Ghost, title: "Anonymous posting", desc: "Share your thoughts without judgment." },
+  { icon: Sparkles, title: "AI writing assistant", desc: "Draft posts and translate in one click." },
+  { icon: ShieldCheck, title: "Safe & private", desc: "Your identity stays yours to control." },
+];
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -83,7 +101,7 @@ export default function Auth() {
         const res = await fetch(`http://localhost:8000/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email_or_username: values.email, password: values.password }),
+          body: JSON.stringify({ email_or_username: values.email.trim(), password: values.password }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.detail || data?.message || "Login failed");
@@ -99,19 +117,16 @@ export default function Auth() {
         }
 
         const fd = new FormData();
-        fd.append("email", values.email);
-        fd.append("username", values.name);
+        fd.append("email", values.email.trim());
+        fd.append("username", values.name.trim());
         fd.append("password", values.password);
-        if (avatarFile) {
-          fd.append("avatar", avatarFile);
-        }
+        if (avatarFile) fd.append("avatar", avatarFile);
 
         const res = await fetch(`http://localhost:8000/auth/signup`, {
           method: "POST",
           body: fd,
         });
         const data = await res.json();
-
         if (!res.ok) throw new Error(data?.detail || data?.message || "Signup failed");
 
         setServerMessage("Signup successful! Please login.");
@@ -128,275 +143,339 @@ export default function Auth() {
 
   const strengthColors = ["bg-red-400", "bg-yellow-400", "bg-orange-400", "bg-green-500"];
   const strengthLabels = ["Very weak", "Weak", "Okay", "Strong"];
+  const strength = passwordStrength(password);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-4">
+    <div className="flex min-h-screen bg-gradient-to-br from-blue-50 via-white to-sky-50 p-4 dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 sm:p-6">
+      {/* Left branding panel */}
+      <div className="relative hidden w-1/2 max-w-2xl items-center justify-center lg:flex">
+        <div className="relative z-10 max-w-md">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500 via-sky-500 to-cyan-400 text-xl font-black text-white shadow-2xl shadow-sky-500/40">
+              CC
+            </div>
+            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">
+              Click{" "}
+              <span className="bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-500 bg-clip-text text-transparent">
+                Connect
+              </span>
+            </h1>
+            <p className="mt-3 text-gray-500 dark:text-gray-400">
+              A modern social space where you can connect, share, and stay anonymous — your way.
+            </p>
+            <div className="mt-10 space-y-6">
+              {features.map((f) => (
+                <div key={f.title} className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white dark:bg-slate-800 text-blue-500 shadow-sm ring-1 ring-gray-100 dark:ring-slate-700">
+                    <f.icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{f.title}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{f.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+        <div className="pointer-events-none absolute -left-20 -top-20 h-72 w-72 rounded-full bg-sky-200/40 blur-3xl dark:bg-sky-500/10" />
+        <div className="pointer-events-none absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-sky-200/40 blur-3xl dark:bg-sky-500/10" />
+      </div>
+
+      {/* Form panel */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md"
+        className="flex w-full items-center justify-center lg:w-1/2"
       >
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 p-8 text-center">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200 }}
-              className="w-20 h-20 mx-auto mb-4 bg-white rounded-full flex items-center justify-center shadow-lg"
-            >
-              <Sparkles className="w-10 h-10 text-purple-600" />
-            </motion.div>
-            <h1 className="text-3xl font-bold text-white mb-2">Click Connect</h1>
-            <p className="text-purple-100 text-sm">Your anonymous social platform</p>
-          </div>
-
-          {/* Mode Toggle */}
-          <div className="flex p-2 m-6 bg-gray-100 rounded-2xl">
-            <button
-              onClick={() => { setMode("login"); reset(); removeAvatar(); }}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                mode === "login"
-                  ? "bg-white text-purple-600 shadow-md"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Login
-            </button>
-            <button
-              onClick={() => { setMode("signup"); reset(); removeAvatar(); }}
-              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${
-                mode === "signup"
-                  ? "bg-white text-purple-600 shadow-md"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)} className="px-8 pb-8 space-y-5">
-            <AnimatePresence mode="wait">
-              {mode === "signup" && (
-                <motion.div
-                  key="username"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      {...register("name", { required: "Username required" })}
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
-                      placeholder="johndoe"
-                    />
-                  </div>
-                  {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {mode === "signup" ? "Email" : "Email/Username"}
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type={mode === "signup" ? "email" : "text"}
-                  {...register("email", { required: "Email required" })}
-                  className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
-                  placeholder="you@example.com"
-                />
-              </div>
-              {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>}
+        <div className="w-full max-w-md">
+          <div className="overflow-hidden rounded-3xl border border-white/60 bg-white/80 dark:border-slate-700/60 dark:bg-slate-900/70 shadow-2xl shadow-sky-200/40 dark:shadow-slate-950 backdrop-blur-xl">
+            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-500 p-7 text-center">
+              <div className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full bg-white/10" />
+              <div className="pointer-events-none absolute -bottom-10 -left-10 h-32 w-32 rounded-full bg-white/10" />
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, delay: 0.1 }}
+                className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/95 shadow-xl"
+              >
+                <Sparkles className="h-8 w-8 text-sky-600" />
+              </motion.div>
+              <h1 className="text-2xl font-extrabold text-white">Welcome</h1>
+              <p className="mt-0.5 text-sm text-white/80">
+                {mode === "login" ? "Sign in to continue" : "Create your free account"}
+              </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  {...register("password", { required: "Password required", minLength: { value: 6, message: "Min 6 chars" } })}
-                  type={showPassword ? "text" : "password"}
-                  className="w-full pl-11 pr-12 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
-                  placeholder="••••••••"
-                />
+            <div className="p-6 m-4 flex rounded-2xl bg-gray-100 dark:bg-slate-700/50">
+              {["login", "signup"].map((m) => (
                 <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  key={m}
+                  onClick={() => {
+                    setMode(m);
+                    reset();
+                    removeAvatar();
+                  }}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all ${
+                    mode === m
+                      ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-sky-400 shadow-md"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-100"
+                  }`}
                 >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {m === "login" ? "Login" : "Sign Up"}
                 </button>
-              </div>
-              {errors.password && <p className="text-sm text-red-500 mt-1">{errors.password.message}</p>}
-
-              {mode === "signup" && password && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-3">
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${(passwordStrength(password) / 3) * 100}%` }}
-                      className={`h-full transition-all ${strengthColors[passwordStrength(password)]}`}
-                    />
-                  </div>
-                  <p className="text-xs text-gray-600 mt-1">
-                    Strength: {strengthLabels[passwordStrength(password)]}
-                  </p>
-                </motion.div>
-              )}
+              ))}
             </div>
 
-            <AnimatePresence mode="wait">
-              {mode === "signup" && (
-                <motion.div
-                  key="confirm"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Confirm Password</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      {...register("confirm", { required: "Confirm password" })}
-                      type="password"
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border-2 border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 outline-none transition-all"
-                      placeholder="••••••••"
-                    />
-                  </div>
-                  {errors.confirm && <p className="text-sm text-red-500 mt-1">{errors.confirm.message}</p>}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <AnimatePresence mode="wait">
-              {mode === "signup" && (
-                <motion.div
-                  key="avatar"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-3"
-                >
-                  <label className="block text-sm font-medium text-gray-700">Profile Picture (Optional)</label>
-                  {avatarPreview ? (
-                    <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-xl border-2 border-purple-200">
-                      <img src={avatarPreview} alt="Preview" className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-700">Avatar uploaded</p>
-                        <p className="text-xs text-gray-500">Looking good!</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={removeAvatar}
-                        className="p-2 rounded-full hover:bg-red-100 text-red-500 transition-colors"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-purple-400 hover:bg-purple-50 cursor-pointer transition-all">
-                      <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-600">Click to upload</span>
-                      <span className="text-xs text-gray-400 mt-1">JPG, PNG or WebP (max {MAX_AVATAR_MB}MB)</span>
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 px-7 pb-8">
+              <AnimatePresence mode="wait">
+                {mode === "signup" && (
+                  <motion.div
+                    key="username"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">Username</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                       <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleAvatarChange}
-                        className="hidden"
+                        {...register("name", { required: "Username required" })}
+                        className="input pl-11"
+                        placeholder="johndoe"
                       />
-                    </label>
-                  )}
-                  {avatarError && <p className="text-sm text-red-500">{avatarError}</p>}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                    </div>
+                    {errors.name && <p className="mt-1 text-xs text-red-500">{errors.name.message}</p>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
-            <AnimatePresence mode="wait">
-              {mode === "signup" && (
-                <motion.div
-                  key="terms"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="flex items-start gap-2"
-                >
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">
+                  {mode === "signup" ? "Email" : "Email / Username"}
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
                   <input
-                    {...register("accept", { required: "You must accept terms" })}
-                    type="checkbox"
-                    id="accept"
-                    className="mt-1 w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    type={mode === "signup" ? "email" : "text"}
+                    {...register("email", { required: "Email required" })}
+                    className="input pl-11"
+                    placeholder="you@example.com"
                   />
-                  <label htmlFor="accept" className="text-sm text-gray-700">
-                    I agree to the Terms of Service and Privacy Policy
-                  </label>
-                  {errors.accept && <p className="text-sm text-red-500">{errors.accept.message}</p>}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
+                {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email.message}</p>}
+              </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white font-bold shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Processing...
-                </span>
-              ) : mode === "login" ? "Sign In" : "Create Account"}
-            </button>
-
-            {serverMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-green-50 border border-green-200 rounded-xl text-sm text-green-700"
-              >
-                {serverMessage}
-              </motion.div>
-            )}
-            {serverError && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700"
-              >
-                {serverError}
-              </motion.div>
-            )}
-
-            <div className="text-center text-sm text-gray-600">
-              {mode === "login" ? (
-                <>
-                  Don't have an account?{" "}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                  <input
+                    {...register("password", {
+                      required: "Password required",
+                      minLength: { value: 6, message: "Min 6 chars" },
+                    })}
+                    type={showPassword ? "text" : "password"}
+                    className="input pl-11 pr-12"
+                    placeholder="••••••••"
+                  />
                   <button
                     type="button"
-                    onClick={() => { setMode("signup"); reset(); }}
-                    className="text-purple-600 font-semibold hover:underline"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 transition-colors hover:text-gray-600 dark:text-gray-300"
+                    aria-label="Toggle password visibility"
                   >
-                    Sign up
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{" "}
-                  <button
-                    type="button"
-                    onClick={() => { setMode("login"); reset(); removeAvatar(); }}
-                    className="text-purple-600 font-semibold hover:underline"
+                </div>
+                {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password.message}</p>}
+
+                {mode === "signup" && password && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2.5">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-slate-600/50">
+                      <div
+                        style={{ width: `${(strength / 3) * 100}%` }}
+                        className={`h-full rounded-full transition-all ${strengthColors[strength]}`}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Strength: <span className="font-medium">{strengthLabels[strength]}</span>
+                    </p>
+                  </motion.div>
+                )}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {mode === "signup" && (
+                  <motion.div
+                    key="confirm"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
                   >
-                    Sign in
-                  </button>
-                </>
-              )}
-            </div>
-          </form>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200">Confirm Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+                      <input
+                        {...register("confirm", { required: "Confirm password" })}
+                        type="password"
+                        className="input pl-11"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    {errors.confirm && <p className="mt-1 text-xs text-red-500">{errors.confirm.message}</p>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence mode="wait">
+                {mode === "signup" && (
+                  <motion.div
+                    key="avatar"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="space-y-3"
+                  >
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+                      Profile Picture <span className="font-normal text-gray-400 dark:text-gray-500">(Optional)</span>
+                    </label>
+                    {avatarPreview ? (
+                      <div className="flex items-center gap-4 rounded-2xl border-2 border-blue-100 bg-blue-50/50 p-4 dark:border-slate-600 dark:bg-slate-800/60">
+                        <img
+                          src={avatarPreview}
+                          alt="Preview"
+                          className="h-16 w-16 rounded-full border-2 border-white object-cover shadow-md"
+                        />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Avatar uploaded</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Looking good!</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={removeAvatar}
+                          className="rounded-full p-2 text-rose-500 transition-colors hover:bg-rose-50 dark:hover:bg-rose-500/10"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 dark:border-slate-600 p-6 transition-all hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-500/10">
+                        <Upload className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" />
+                        <span className="text-sm text-gray-600 dark:text-gray-300">Click to upload</span>
+                        <span className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                          JPG, PNG or WebP (max {MAX_AVATAR_MB}MB)
+                        </span>
+                        <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                      </label>
+                    )}
+                    {avatarError && <p className="text-xs text-red-500">{avatarError}</p>}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence mode="wait">
+                {mode === "signup" && (
+                  <motion.div
+                    key="terms"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="flex items-start gap-2.5"
+                  >
+                    <input
+                      {...register("accept", { required: "You must accept terms" })}
+                      type="checkbox"
+                      id="accept"
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
+                    />
+                    <label htmlFor="accept" className="text-sm text-gray-600 dark:text-gray-300">
+                      I agree to the <span className="font-medium text-blue-600">Terms of Service</span> and{" "}
+                      <span className="font-medium text-blue-600">Privacy Policy</span>
+                    </label>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <button type="submit" disabled={loading} className="btn-primary w-full py-3.5">
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Processing...
+                  </span>
+                ) : mode === "login" ? (
+                  "Sign In"
+                ) : (
+                  "Create Account"
+                )}
+              </button>
+
+              <AnimatePresence>
+                {serverMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-400"
+                  >
+                    {serverMessage}
+                  </motion.div>
+                )}
+                {serverError && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+                  >
+                    {serverError}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="text-center text-sm text-gray-500 dark:text-gray-400">
+                {mode === "login" ? (
+                  <>
+                    Don't have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("signup");
+                        reset();
+                      }}
+                      className="font-semibold text-blue-600 hover:underline dark:text-sky-400"
+                    >
+                      Sign up
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    Already have an account?{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("login");
+                        reset();
+                        removeAvatar();
+                      }}
+                      className="font-semibold text-blue-600 hover:underline dark:text-sky-400"
+                    >
+                      Sign in
+                    </button>
+                  </>
+                )}
+              </div>
+            </form>
+          </div>
+
+          <p className="mt-6 flex items-center justify-center gap-2 text-center text-xs text-gray-400 dark:text-gray-500">
+            <Wand2 className="h-3.5 w-3.5" />
+            Connect, share, and stay anonymous with ClickConnect.
+          </p>
         </div>
       </motion.div>
     </div>

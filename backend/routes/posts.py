@@ -29,7 +29,7 @@ def _public_url_to_local_path(url: str) -> Path:
     return None
 
 
-@router.get("/")
+@router.get("")
 def get_posts(
     request: Request,
     skip: int = Query(0, ge=0),
@@ -288,7 +288,7 @@ def get_user_posts(
     Get all non-anonymous posts by a specific user.
     """
     # Find the user by username
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(User.username == username.strip()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
@@ -306,16 +306,21 @@ def get_user_posts(
     if not posts:
         return JSONResponse(content=[])
     
+    base = str(request.base_url).rstrip("/")
+    
     post_ids = [p.id for p in posts]
     
     # Get media
     media_rows = db.query(PostMedia).filter(PostMedia.post_id.in_(post_ids)).all()
     media_map = {}
     for m in media_rows:
+        url = m.url
+        if url and isinstance(url, str) and url.startswith("/"):
+            url = f"{base}{url}"
         if m.post_id not in media_map:
             media_map[m.post_id] = []
         media_map[m.post_id].append({
-            "url": m.url,
+            "url": url,
             "media_type": m.media_type,
             "order": m.order
         })
@@ -349,6 +354,8 @@ def get_user_posts(
     result = []
     for p in posts:
         avatar = user.avatar_url or "/profile-picture.png"
+        if avatar and isinstance(avatar, str) and avatar.startswith("/"):
+            avatar = f"{base}{avatar}"
         
         author_out = {
             "id": user.id,

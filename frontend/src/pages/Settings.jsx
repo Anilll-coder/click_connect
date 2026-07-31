@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import useAuth from "../utils/useAuth";
 import { useNavigate } from "react-router-dom";
-
-const API_BASE = "http://localhost:8000";
+import { motion } from "framer-motion";
+import { Camera, Save, User, Mail, PenLine, CheckCircle2 } from "lucide-react";
+import useAuth from "../utils/useAuth";
+import { API_BASE, getAuthToken, resolveAsset } from "../utils/helpers";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -16,13 +17,13 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
 
-  const token = localStorage.getItem("cc_token");
+  const token = getAuthToken();
 
   useEffect(() => {
     setUsername(authUser?.username ?? "");
     setEmail(authUser?.email ?? "");
     setBio(authUser?.bio ?? "");
-    setPreviewUrl(authUser?.avatar_url ? `${API_BASE}${authUser.avatar_url}` : null);
+    setPreviewUrl(authUser?.avatar_url ? resolveAsset(authUser.avatar_url) : null);
   }, [authUser]);
 
   const onFileChange = (e) => {
@@ -76,112 +77,124 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto px-4 py-6">
+    <div className="page max-w-2xl">
+      <header className="animate-fade-in">
+        <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Settings</h1>
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Manage your profile and preferences</p>
+      </header>
 
-
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-        <form onSubmit={onSubmit} className="space-y-6">
-          {/* Avatar Section */}
-          <div className="flex flex-col items-center gap-4">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="card overflow-hidden"
+      >
+        <form onSubmit={onSubmit} className="space-y-6 p-6">
+          {/* Avatar */}
+          <div className="flex flex-col items-center gap-4 pb-2">
             <div className="relative">
               {previewUrl ? (
                 <img
                   src={previewUrl}
                   alt="avatar preview"
-                  className="w-32 h-32 rounded-full object-cover border-4 border-blue-200 shadow-md"
+                  className="h-32 w-32 rounded-full border-4 border-white object-cover shadow-xl ring-2 ring-blue-100 dark:ring-slate-700"
                 />
               ) : (
-                <div className="w-32 h-32 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-4xl font-bold shadow-md">
+                <div className="flex h-32 w-32 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-5xl font-bold text-white shadow-xl ring-2 ring-blue-100 dark:ring-slate-700">
                   {username?.[0]?.toUpperCase() || "U"}
                 </div>
               )}
+              <label className="absolute bottom-1 right-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-white dark:bg-slate-800 text-blue-600 dark:text-sky-400 shadow-md ring-1 ring-gray-200 dark:ring-slate-700 transition-all hover:bg-blue-50 dark:hover:bg-blue-500/10">
+                <Camera className="h-4 w-4" />
+                <input type="file" accept="image/*" onChange={onFileChange} className="hidden" />
+              </label>
             </div>
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={onFileChange}
-                className="hidden"
-              />
-              <div className="px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-medium transition-colors">
-                Change Avatar
-              </div>
-            </label>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Click the camera icon to change your avatar</p>
           </div>
 
           {/* Username */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Username
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <User className="h-4 w-4 text-gray-400 dark:text-gray-500" /> Username
             </label>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all"
+              className="input"
               placeholder="Your username"
             />
           </div>
 
           {/* Email */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Email
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <Mail className="h-4 w-4 text-gray-400 dark:text-gray-500" /> Email
             </label>
             <input
               type="email"
               value={email}
               disabled
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed outline-none"
+              className="input cursor-not-allowed bg-gray-50 dark:bg-slate-800/60 text-gray-400 dark:text-gray-500"
               placeholder="your.email@example.com"
             />
+            <p className="mt-1.5 text-xs text-gray-400 dark:text-gray-500">Email cannot be changed.</p>
           </div>
 
           {/* Bio */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Bio
+            <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-200">
+              <PenLine className="h-4 w-4 text-gray-400 dark:text-gray-500" /> Bio
             </label>
             <textarea
-              value={bio}
+              value={bio || ""}
               onChange={(e) => setBio(e.target.value)}
               rows={4}
-              className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all resize-none"
+              className="input resize-none"
               placeholder="Tell us about yourself..."
             />
           </div>
 
           {/* Messages */}
           {msg && (
-            <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-700">
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-3.5 text-sm text-green-700 dark:border-green-500/30 dark:bg-green-500/10 dark:text-green-400"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
               {msg}
-            </div>
+            </motion.div>
           )}
           {err && (
-            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-400"
+            >
               {err}
-            </div>
+            </motion.div>
           )}
 
-          {/* Buttons */}
-          <div className="flex items-center gap-3">
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
-            >
-              {loading ? "Saving..." : "Save Changes"}
+          <div className="flex items-center gap-3 border-t border-gray-100 dark:border-slate-700 pt-5">
+            <button type="submit" disabled={loading} className="btn-primary">
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Save Changes
+                </>
+              )}
             </button>
-            <button
-              type="button"
-              onClick={() => navigate("/")}
-              className="px-6 py-3 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-            >
+            <button type="button" onClick={() => navigate("/")} className="btn-secondary">
               Cancel
             </button>
           </div>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }

@@ -31,7 +31,7 @@ class ChatResponse(BaseModel):
 def chatbot(payload: ChatRequest):
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-flash-latest",
             contents=payload.query,
             config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,

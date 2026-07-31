@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const API_BASE = "http://localhost:8000";
+import { motion } from "framer-motion";
+import { BellRing, Heart, MessageCircle, ChevronRight } from "lucide-react";
+import { API_BASE, getAuthToken, resolveAsset, timeAgo } from "../utils/helpers";
+import { Loader, EmptyState } from "../components/ui";
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const token = localStorage.getItem("cc_token");
+  const token = getAuthToken();
   const nav = useNavigate();
 
   useEffect(() => {
     fetchNotifications();
     markAllAsRead();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function markAllAsRead() {
@@ -42,7 +45,6 @@ export default function NotificationsPage() {
       setNotifications(data);
     } catch (err) {
       console.error("fetchNotifications error:", err);
-      alert("Failed to load notifications.");
     } finally {
       setLoading(false);
     }
@@ -50,13 +52,10 @@ export default function NotificationsPage() {
 
   async function markAsRead(notificationId) {
     try {
-      const res = await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
+      await fetch(`${API_BASE}/notifications/${notificationId}/read`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to mark as read");
-      
-      // Update local state
       setNotifications((prev) =>
         prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n))
       );
@@ -65,64 +64,77 @@ export default function NotificationsPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center py-10">
-        <svg className="animate-spin h-8 w-8 text-fuchsia-500 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p className="text-lg text-gray-600 font-medium">Loading notifications...</p>
-      </div>
-    );
+  function openNotification(notif) {
+    if (!notif.is_read) markAsRead(notif.id);
+    if (notif.post_id) nav(`/post/${notif.post_id}`);
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 py-6">
-
-
-      {notifications.length === 0 ? (
-        <div className="text-center py-10 bg-white rounded-xl shadow-md border border-gray-100">
-          <p className="text-xl text-gray-600 font-medium mb-2">No notifications yet! 📭</p>
-          <p className="text-gray-500">You'll see updates here when people interact with your posts.</p>
+    <div className="page">
+      <header className="animate-fade-in flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Notifications</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">See who's interacting with your posts</p>
         </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/30">
+          <BellRing className="h-5 w-5" />
+        </div>
+      </header>
+
+      {loading ? (
+        <Loader label="Loading notifications..." />
+      ) : notifications.length === 0 ? (
+        <EmptyState
+          icon={BellRing}
+          title="All caught up"
+          message="You'll see updates here when people interact with your posts."
+        />
       ) : (
-        <div className="space-y-3">
-          {notifications.map((notif) => (
-            <div
+        <div className="space-y-2.5">
+          {notifications.map((notif, idx) => (
+            <motion.button
               key={notif.id}
-              onClick={() => !notif.is_read && markAsRead(notif.id)}
-              className={`p-4 rounded-xl shadow-md border transition-all cursor-pointer ${
-                notif.is_read
-                  ? "bg-white border-gray-100"
-                  : "bg-gradient-to-r from-purple-50 to-pink-50 border-purple-200"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.03 }}
+              onClick={() => openNotification(notif)}
+              className={`card group flex w-full items-center gap-4 p-4 text-left transition-all hover:border-blue-200 dark:hover:border-slate-600 hover:shadow-md ${
+                notif.is_read ? "" : "border-blue-100 bg-gradient-to-r from-blue-50/80 to-sky-50/80 dark:border-sky-500/30 dark:from-blue-500/10 dark:to-sky-500/10"
               }`}
             >
-              <div className="flex items-start gap-3">
-                {notif.actor && (
-                  <img
-                    src={notif.actor.avatar_url ? `${API_BASE}${notif.actor.avatar_url}` : "/default-avatar.png"}
-                    alt={notif.actor.username}
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
-                )}
-                <div className="flex-1">
-                  <p className="text-gray-800 font-medium">{notif.message}</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {(() => {
-                      let dateStr = notif.created_at;
-                      if (dateStr && !dateStr.endsWith("Z") && !dateStr.includes("+")) {
-                        dateStr += "Z";
-                      }
-                      return new Date(dateStr).toLocaleString();
-                    })()}
-                  </p>
-                </div>
-                {!notif.is_read && (
-                  <div className="w-2 h-2 bg-purple-500 rounded-full mt-2"></div>
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                  notif.type === "like"
+                    ? "bg-rose-50 text-rose-500 dark:bg-rose-500/10"
+                    : "bg-blue-50 text-blue-500 dark:bg-blue-500/10"
+                }`}
+              >
+                {notif.type === "like" ? (
+                  <Heart className="h-5 w-5 fill-rose-500 text-rose-500" />
+                ) : (
+                  <MessageCircle className="h-5 w-5" />
                 )}
               </div>
-            </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  {notif.actor?.avatar_url && (
+                    <img
+                      src={resolveAsset(notif.actor.avatar_url)}
+                      alt={notif.actor.username}
+                      className="h-6 w-6 rounded-full object-cover ring-2 ring-white dark:ring-slate-800"
+                    />
+                  )}
+                  <span className="truncate text-sm text-gray-800 dark:text-gray-100">{notif.message}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-gray-400 dark:text-gray-500">{timeAgo(notif.created_at)}</p>
+              </div>
+
+              {!notif.is_read && (
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" />
+              )}
+              <ChevronRight className="h-4 w-4 shrink-0 text-gray-300 dark:text-gray-600 transition-transform group-hover:translate-x-0.5 group-hover:text-blue-400" />
+            </motion.button>
           ))}
         </div>
       )}

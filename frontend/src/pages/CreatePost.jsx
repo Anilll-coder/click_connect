@@ -1,26 +1,19 @@
-// src/components/PostCreator.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-
-// Assuming you have an icon library or using simple characters/inline SVGs
-const PhotoVideoIcon = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.096l4.444-4.444a1.25 1.25 0 0 1 1.768 0l2.502 2.502 3.896-3.896a1.25 1.25 0 0 1 1.768 0l2.502 2.502V6.75a.75.75 0 0 0-.75-.75H3.75a.75.75 0 0 0-.75.75v9.346ZM9.75 9.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z" clipRule="evenodd" /></svg>;
-const UserIcon = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0ZM3.751 20.105a8.25 8.25 0 0 1 16.498 0 .75.75 0 0 1-.437.695A18.683 18.683 0 0 1 12 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 0 1-.437-.695Z" clipRule="evenodd" /></svg>;
-const EyeSlashIcon = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" /><path fillRule="evenodd" d="M1.323 11.411A9.74 9.74 0 0 0 2.23 15C4.693 20.354 10.373 22.5 12 22.5c.348 0 .684-.047 1.008-.13A9.74 9.74 0 0 0 21.77 15c-2.463-5.354-8.143-7.5-9.77-7.5h.001c-.198 0-.394.008-.59.022L12 11.25z" clipRule="evenodd" /></svg>;
-
-
-const API_BASE = "http://localhost:8000";
+import { motion, AnimatePresence } from "framer-motion";
+import { Image as ImageIcon, Video, User, EyeOff, X, Send, Info } from "lucide-react";
+import { API_BASE } from "../utils/helpers";
 
 export default function PostCreator({ onPosted }) {
   const [body, setBody] = useState("");
-  const [files, setFiles] = useState([]); // File objects
-  const [previews, setPreviews] = useState([]); // {type, src, name}
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const nav = useNavigate();
-  
-  // --- Semi-Backend Logic for Anonymity ---
   const [isAnonymous, setIsAnonymous] = useState(false);
-  // -----------------------------------------
+  const [charCount, setCharCount] = useState(0);
+  const textareaRef = useRef(null);
+  const nav = useNavigate();
 
   useEffect(() => {
     const p = [];
@@ -36,10 +29,18 @@ export default function PostCreator({ onPosted }) {
     };
   }, [files]);
 
+  useEffect(() => {
+    const locationContent = window.history?.state?.usr?.content;
+    if (locationContent && !body) {
+      setBody(locationContent);
+      setCharCount(locationContent.length);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function onFilesChange(e) {
     const chosen = Array.from(e.target.files || []);
     if (!chosen.length) return;
-    // Optional: filter by allowed mime types on client too
     setFiles((prev) => [...prev, ...chosen]);
     e.target.value = null;
   }
@@ -51,7 +52,7 @@ export default function PostCreator({ onPosted }) {
   async function submitPost(e) {
     e.preventDefault();
     setError(null);
-    if (!body && files.length === 0) {
+    if (!body.trim() && files.length === 0) {
       setError("Write something or attach a file.");
       return;
     }
@@ -65,17 +66,11 @@ export default function PostCreator({ onPosted }) {
       const fd = new FormData();
       fd.append("body", body);
       files.forEach((f) => fd.append("files", f));
-
-      // --- Backend Logic Adjustment for Anonymity ---
-      // The server will need to check for this field.
-      fd.append("is_anonymous", isAnonymous); 
-      // ----------------------------------------------
+      fd.append("is_anonymous", isAnonymous);
 
       const res = await fetch(`${API_BASE}/posts/create`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
 
@@ -91,16 +86,15 @@ export default function PostCreator({ onPosted }) {
       }
 
       const created = await res.json();
-
-      // reset UI
       setBody("");
       setFiles([]);
       setPreviews([]);
       setError(null);
-      setIsAnonymous(false); // Reset anonymity after successful post
+      setIsAnonymous(false);
+      setCharCount(0);
 
-      // notify parent to refresh feed
       if (onPosted) onPosted(created);
+      else nav("/");
     } catch (err) {
       setError(err.message || "Upload failed");
     } finally {
@@ -109,91 +103,140 @@ export default function PostCreator({ onPosted }) {
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto p-4 bg-white rounded-xl shadow-lg border border-gray-100">
-      <h2 className="text-xl font-semibold text-gray-800 mb-4 border-b pb-3">Share Your Thoughts 💬</h2>
-      <form onSubmit={submitPost} className="space-y-4">
-        {/* Textarea Section */}
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="What's on your mind?"
-          className="w-full p-3 border-none focus:ring-0 rounded-lg bg-white min-h-[100px] resize-none outline-none text-lg placeholder-gray-400"
-        />
+    <div className="page max-w-2xl">
+      <header className="animate-fade-in">
+        <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">
+          {isAnonymous ? "Post Anonymously" : "Create a Post"}
+        </h1>
+        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+          {isAnonymous
+            ? "Your identity stays hidden — speak your mind."
+            : "Share your thoughts with the community."}
+        </p>
+      </header>
 
-        {/* Media Preview Section */}
-        {previews.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-3 border border-gray-200 rounded-lg bg-gray-50">
-            {previews.map((p, i) => (
-              <div key={i} className="relative aspect-square rounded-md overflow-hidden shadow-sm group border border-gray-300">
-                {/* Media rendering logic remains the same */}
-                {p.type === "image" ? (
-                  <img src={p.src} alt={p.name} className="w-full h-full object-cover" />
-                ) : p.type === "video" ? (
-                  <video src={p.src} className="w-full h-full object-cover" controls />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-gray-200 p-2 text-center">
-                    <span className="text-sm font-medium text-gray-700">File</span>
-                    <span className="text-xs text-gray-500 truncate w-full px-1">{p.name}</span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => removeFile(i)}
-                  className="absolute top-1 right-1 bg-rose-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm shadow-md opacity-0 group-hover:opacity-100 transition-opacity focus:outline-none"
-                  aria-label="remove file"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+      <motion.form
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        onSubmit={submitPost}
+        className="card overflow-hidden"
+      >
+        <div className="border-b border-gray-100 dark:border-slate-700 p-5">
+          <textarea
+            ref={textareaRef}
+            value={body}
+            onChange={(e) => {
+              setBody(e.target.value);
+              setCharCount(e.target.value.length);
+            }}
+            placeholder={isAnonymous ? "Share something anonymously..." : "What's on your mind?"}
+            className="min-h-[140px] w-full resize-none border-none p-0 text-lg leading-relaxed outline-none placeholder-gray-300 dark:placeholder-gray-600"
+            maxLength={5000}
+          />
+          <div className="mt-2 flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
+            <span>{charCount > 0 ? `${charCount}/5000` : ""}</span>
           </div>
-        )}
+        </div>
 
-        {error && <p className="text-sm text-rose-600 font-medium">{error}</p>}
-        
-        <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            
-          {/* Left side: Attach and Anonymous toggle */}
-          <div className="flex items-center gap-3">
-            
-            {/* Attach Media Button (Styling improved) */}
-            <label className="flex items-center gap-2 px-3 py-2 rounded-full bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100 cursor-pointer text-sm font-medium transition-colors">
-              <PhotoVideoIcon className="w-5 h-5" />
-              Media
-              <input
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                onChange={onFilesChange}
-                className="hidden"
-              />
-            </label>
-            
-            {/* Anonymous Toggle Button (New UI feature) */}
-            <button
-              type="button"
-              onClick={() => setIsAnonymous(!isAnonymous)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm font-medium transition-all ${
-                isAnonymous
-                  ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-              }`}
+        {/* Media previews */}
+        <AnimatePresence>
+          {previews.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 p-4"
             >
-              {isAnonymous ? <EyeSlashIcon className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
-              {isAnonymous ? "Posting Anonymously" : "Post as Me"}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                {previews.map((p, i) => (
+                  <div
+                    key={i}
+                    className="group relative aspect-square overflow-hidden rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm"
+                  >
+                    {p.type === "image" ? (
+                      <img src={p.src} alt={p.name} className="h-full w-full object-cover" />
+                    ) : p.type === "video" ? (
+                      <video src={p.src} className="h-full w-full object-cover" controls />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center bg-gray-100 dark:bg-slate-700/50 p-2 text-center">
+                        <Info className="mb-1 h-5 w-5 text-gray-400 dark:text-gray-500" />
+                        <span className="w-full truncate px-1 text-xs text-gray-500 dark:text-gray-400">{p.name}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-gray-900/70 text-white shadow-md transition-all hover:bg-rose-500"
+                      aria-label="remove file"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className="p-5">
+          {error && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-4 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-rose-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-rose-400"
+            >
+              {error}
+            </motion.p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 dark:bg-blue-500/10 dark:text-sky-400 dark:hover:bg-blue-500/20">
+                <ImageIcon className="h-4 w-4" />
+                Media
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  multiple
+                  onChange={onFilesChange}
+                  className="hidden"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setIsAnonymous(!isAnonymous)}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                  isAnonymous
+                    ? "bg-gray-900 text-white shadow-lg shadow-gray-900/20"
+                    : "bg-gray-100 dark:bg-slate-700/50 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600/50"
+                }`}
+              >
+                {isAnonymous ? <EyeOff className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                {isAnonymous ? "Anonymous On" : "Post as Me"}
+              </button>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || (!body.trim() && files.length === 0)}
+              className="btn-primary"
+            >
+              {loading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Posting...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Post
+                </>
+              )}
             </button>
           </div>
-          
-          {/* Right side: Submit Button */}
-          <button
-            type="submit"
-            disabled={loading || (!body && files.length === 0)}
-            className="px-6 py-2 rounded-full bg-gradient-to-r from-fuchsia-500 to-amber-400 text-white font-bold text-base shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Posting..." : "Post"}
-          </button>
         </div>
-      </form>
+      </motion.form>
     </div>
   );
 }

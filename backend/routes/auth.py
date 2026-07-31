@@ -36,6 +36,10 @@ async def signup(
     avatar: UploadFile = File(None),
     db: Session = Depends(get_db),
 ):
+    email = email.strip().lower()
+    username = username.strip()
+    if not username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Username cannot be empty")
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     if db.query(User).filter(User.username == username).first():
@@ -79,9 +83,10 @@ async def signup(
 
 @router.post("/login", response_model=TokenOut)
 def login(payload: LoginIn, db: Session = Depends(get_db)):
+    identifier = payload.email_or_username.strip()
     user = db.query(User).filter(
-        (User.email == payload.email_or_username) |
-        (User.username == payload.email_or_username)
+        (User.email == identifier) |
+        (User.username == identifier)
     ).first()
 
     if not user:
@@ -149,6 +154,14 @@ async def update_user(
 ):
     if not current_user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+    if username:
+        username = username.strip()
+        if not username:
+            raise HTTPException(status_code=400, detail="Username cannot be empty")
+
+    if email:
+        email = email.strip().lower()
 
     # Check uniqueness if changing
     if username and username != current_user.username:
