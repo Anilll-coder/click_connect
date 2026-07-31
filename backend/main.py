@@ -8,7 +8,7 @@ from routes import auth, route, uploads, interactions, posts, notifications
 
 app = FastAPI()
 
-origins = ["http://localhost:8000", "http://localhost:5173"]
+origins = ["https://click-connect-1.onrender.com/"]
 
 app.add_middleware(
     CORSMiddleware,
