@@ -1,10 +1,14 @@
 #env
 *.env
+.env.*
+!*.env.example
+backend/.env
 #database
 *.db
 #virtual environment
 venv/
 #pycache
-__pycache__
+__pycache__/
+*.pyc
 #static files
 static/
