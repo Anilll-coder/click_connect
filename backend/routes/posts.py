@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status,Query,File,UploadFile,Form
@@ -5,12 +6,37 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from utils.localStorage import validate_file, secure_filename, save_image, save_video
+from utils.localStorage import validate_file, save_image, save_video
 from database.db import get_db
-from routes.auth import get_current_user
-from models.models import Post,PostMedia, User, Like, Comment
+from routes.auth import get_current_user, require_current_user
+from models.models import Post, PostMedia, User, Like, Comment, Follow, Bookmark, Hashtag, PostHashtag
+from utils.ratelimit import limiter
+from utils.hashtags import extract_hashtags
+from routes.moderation import get_blocked_user_ids
+
+logger = logging.getLogger("clickconnect.posts")
+
+MAX_POST_BODY_LENGTH = 5000
 
 router = APIRouter(prefix="/posts", tags=["posts.me"])
+
+
+def _link_hashtags(db: Session, post: Post) -> None:
+    tags = extract_hashtags(post.body)
+    if not tags:
+        return
+    for tag in tags:
+        hashtag = db.query(Hashtag).filter(Hashtag.tag == tag).first()
+        if not hashtag:
+            hashtag = Hashtag(tag=tag)
+            db.add(hashtag)
+            db.flush()  # need hashtag.id before linking
+        exists = db.query(PostHashtag).filter(
+            PostHashtag.post_id == post.id, PostHashtag.hashtag_id == hashtag.id
+        ).first()
+        if not exists:
+            db.add(PostHashtag(post_id=post.id, hashtag_id=hashtag.id))
+    db.commit()
 
 
 def _public_url_to_local_path(url: str) -> Path:
@@ -30,10 +56,11 @@ def _public_url_to_local_path(url: str) -> Path:
 
 
 @router.get("")
+@limiter.limit("60/minute")
 def get_posts(
     request: Request,
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
+    limit: int = Query(10, ge=1, le=50),
     is_anonymous: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),  # uses your existing auth helper
@@ -43,11 +70,15 @@ def get_posts(
     If Authorization header present & valid, liked_by_current_user will be set per-post.
     """
 
-    # 1) Query posts based on is_anonymous flag
+    query = db.query(Post).filter(getattr(Post, "is_anonymous", False) == is_anonymous)
+
+    if current_user:
+        blocked_ids = get_blocked_user_ids(db, current_user.id)
+        if blocked_ids:
+            query = query.filter(~Post.author_id.in_(blocked_ids))
+
     posts: List[Post] = (
-        db.query(Post)
-        .filter(getattr(Post, "is_anonymous", False) == is_anonymous)
-        .order_by(Post.created_at.desc())
+        query.order_by(Post.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -102,11 +133,17 @@ def get_posts(
 
     # liked set for current user (if authenticated)
     liked_set = set()
+    bookmarked_set = set()
     if current_user:
         liked_rows = db.query(Like.post_id).filter(Like.post_id.in_(post_ids), Like.user_id == current_user.id).all()
         # liked_rows might be [(post_id,), ...] or objects; handle both
         liked_set = {r[0] if isinstance(r, (list, tuple)) else getattr(r, "post_id", None) for r in liked_rows}
         liked_set.discard(None)
+
+        bookmark_rows = db.query(Bookmark.post_id).filter(
+            Bookmark.post_id.in_(post_ids), Bookmark.user_id == current_user.id
+        ).all()
+        bookmarked_set = {r[0] for r in bookmark_rows}
 
     # build final result
     result = []
@@ -139,17 +176,180 @@ def get_posts(
             "likes_count": int(likes_counts.get(p.id, 0)),
             "comments_count": int(comments_counts.get(p.id, 0)),
             "liked_by_current_user": bool(p.id in liked_set),
+            # Computed server-side (not from author_id, which is nulled for
+            # anonymous posts) so an owner can still manage their own
+            # anonymous post without exposing their identity to anyone else.
+            "is_owner": bool(current_user and p.author_id == current_user.id),
+            "bookmarked_by_current_user": bool(p.id in bookmarked_set),
         }
         result.append(item)
 
     return JSONResponse(content=jsonable_encoder(result))
 
 
+@router.get("/hashtag/{tag}", summary="Posts tagged with a given hashtag")
+@limiter.limit("60/minute")
+def get_posts_by_hashtag(
+    tag: str,
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    normalized = tag.strip().lower().lstrip("#")
+    hashtag = db.query(Hashtag).filter(Hashtag.tag == normalized).first()
+    if not hashtag:
+        return JSONResponse(content=[])
+
+    posts: List[Post] = (
+        db.query(Post)
+        .join(PostHashtag, PostHashtag.post_id == Post.id)
+        .filter(PostHashtag.hashtag_id == hashtag.id)
+        .order_by(Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    if not posts:
+        return JSONResponse(content=[])
+
+    post_ids = [p.id for p in posts]
+    author_ids = list({p.author_id for p in posts})
+    base = str(request.base_url).rstrip("/")
+
+    users_map = {u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()}
+    media_rows = db.query(PostMedia).filter(PostMedia.post_id.in_(post_ids)).all()
+    media_map = {}
+    for m in media_rows:
+        url = f"{base}{m.url}" if m.url and m.url.startswith("/") else m.url
+        media_map.setdefault(m.post_id, []).append(
+            {"id": m.id, "url": url, "media_type": m.media_type, "order": m.order}
+        )
+    likes_counts = dict(
+        db.query(Like.post_id, func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id).all()
+    )
+    comments_counts = dict(
+        db.query(Comment.post_id, func.count(Comment.id)).filter(Comment.post_id.in_(post_ids)).group_by(Comment.post_id).all()
+    )
+    liked_set, bookmarked_set = set(), set()
+    if current_user:
+        liked_set = {r[0] for r in db.query(Like.post_id).filter(Like.post_id.in_(post_ids), Like.user_id == current_user.id).all()}
+        bookmarked_set = {r[0] for r in db.query(Bookmark.post_id).filter(Bookmark.post_id.in_(post_ids), Bookmark.user_id == current_user.id).all()}
+
+    result = []
+    for p in posts:
+        # Hashtags are only linked for non-anonymous posts (see _link_hashtags),
+        # so author is always safe to reveal here.
+        u = users_map.get(p.author_id)
+        avatar = (u.avatar_url or "") if u else ""
+        if avatar.startswith("/"):
+            avatar = f"{base}{avatar}"
+        result.append({
+            "id": p.id,
+            "body": p.body,
+            "is_anonymous": False,
+            "author": {"id": u.id, "username": u.username, "avatar_url": avatar} if u else None,
+            "author_id": p.author_id,
+            "created_at": p.created_at.isoformat() if hasattr(p.created_at, "isoformat") else str(p.created_at),
+            "media": media_map.get(p.id, []),
+            "likes_count": int(likes_counts.get(p.id, 0)),
+            "comments_count": int(comments_counts.get(p.id, 0)),
+            "liked_by_current_user": bool(p.id in liked_set),
+            "is_owner": bool(current_user and p.author_id == current_user.id),
+            "bookmarked_by_current_user": bool(p.id in bookmarked_set),
+        })
+
+    return JSONResponse(content=jsonable_encoder(result))
+
+
+@router.get("/feed/following", summary="Posts from users the current user follows")
+@limiter.limit("60/minute")
+def get_following_feed(
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+):
+    """Anonymous posts are excluded here by design — there is no author to
+    attribute them to in a follow-based feed without breaking anonymity."""
+    followed_ids = [
+        r[0] for r in db.query(Follow.following_id).filter(Follow.follower_id == current_user.id).all()
+    ]
+    if not followed_ids:
+        return JSONResponse(content=[])
+
+    posts: List[Post] = (
+        db.query(Post)
+        .filter(Post.author_id.in_(followed_ids), Post.is_anonymous == False)
+        .order_by(Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    if not posts:
+        return JSONResponse(content=[])
+
+    post_ids = [p.id for p in posts]
+    author_ids = list({p.author_id for p in posts})
+    base = str(request.base_url).rstrip("/")
+
+    users_map = {u.id: u for u in db.query(User).filter(User.id.in_(author_ids)).all()}
+
+    media_rows = db.query(PostMedia).filter(PostMedia.post_id.in_(post_ids)).order_by(
+        PostMedia.post_id, getattr(PostMedia, "order", PostMedia.id)
+    ).all()
+    media_map = {}
+    for m in media_rows:
+        url = f"{base}{m.url}" if m.url and m.url.startswith("/") else m.url
+        media_map.setdefault(m.post_id, []).append(
+            {"id": m.id, "url": url, "media_type": m.media_type, "order": m.order}
+        )
+
+    likes_counts = dict(
+        db.query(Like.post_id, func.count(Like.id)).filter(Like.post_id.in_(post_ids)).group_by(Like.post_id).all()
+    )
+    comments_counts = dict(
+        db.query(Comment.post_id, func.count(Comment.id)).filter(Comment.post_id.in_(post_ids)).group_by(Comment.post_id).all()
+    )
+    liked_set = {
+        r[0] for r in db.query(Like.post_id).filter(Like.post_id.in_(post_ids), Like.user_id == current_user.id).all()
+    }
+    bookmarked_set = {
+        r[0] for r in db.query(Bookmark.post_id).filter(Bookmark.post_id.in_(post_ids), Bookmark.user_id == current_user.id).all()
+    }
+
+    result = []
+    for p in posts:
+        u = users_map.get(p.author_id)
+        avatar = u.avatar_url or "" if u else ""
+        if avatar.startswith("/"):
+            avatar = f"{base}{avatar}"
+        result.append({
+            "id": p.id,
+            "body": p.body,
+            "is_anonymous": False,
+            "author": {"id": u.id, "username": u.username, "avatar_url": avatar} if u else None,
+            "author_id": p.author_id,
+            "created_at": p.created_at.isoformat() if hasattr(p.created_at, "isoformat") else str(p.created_at),
+            "media": media_map.get(p.id, []),
+            "likes_count": int(likes_counts.get(p.id, 0)),
+            "comments_count": int(comments_counts.get(p.id, 0)),
+            "liked_by_current_user": bool(p.id in liked_set),
+            "is_owner": p.author_id == current_user.id,
+            "bookmarked_by_current_user": bool(p.id in bookmarked_set),
+        })
+
+    return JSONResponse(content=jsonable_encoder(result))
+
+
 @router.get("/me", summary="Get current user's posts (paginated)")
-def get_my_posts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def get_my_posts(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
     """
     Returns list of posts for the current user with media embedded.
     """
+    base = str(request.base_url).rstrip("/")
     posts = db.query(Post).filter(Post.author_id == current_user.id).order_by(Post.created_at.desc()).all()
     
     if not posts:
@@ -180,11 +380,16 @@ def get_my_posts(db: Session = Depends(get_db), current_user: User = Depends(get
         .all()
     )
 
+    avatar = current_user.avatar_url or ""
+    if avatar.startswith("/"):
+        avatar = f"{base}{avatar}"
+
     out = []
     for p in posts:
         media = []
         for m in p.media:
-            media.append({"id": m.id, "url": "http://localhost:8000"+m.url, "media_type": m.media_type, "order": m.order})
+            url = f"{base}{m.url}" if m.url and m.url.startswith("/") else m.url
+            media.append({"id": m.id, "url": url, "media_type": m.media_type, "order": m.order})
         out.append({
             "id": p.id,
             "body": p.body,
@@ -192,7 +397,7 @@ def get_my_posts(db: Session = Depends(get_db), current_user: User = Depends(get
             "author": {
                 "id": current_user.id,
                 "username": current_user.username,
-                "avatar_url": "http://localhost:8000"+current_user.avatar_url
+                "avatar_url": avatar,
             },
             "media": media,
             "likes_count": int(likes_counts.get(p.id, 0)),
@@ -203,6 +408,7 @@ def get_my_posts(db: Session = Depends(get_db), current_user: User = Depends(get
 
 
 @router.get("/{post_id}")
+@limiter.limit("90/minute")
 def get_post_by_id(
     post_id: int,
     request: Request,
@@ -241,11 +447,13 @@ def get_post_by_id(
     # Get comments count
     comments_count = db.query(func.count(Comment.id)).filter(Comment.post_id == post_id).scalar() or 0
     
-    # Check if current user liked
+    # Check if current user liked / bookmarked
     liked_by_current_user = False
+    bookmarked_by_current_user = False
     if current_user:
         liked_by_current_user = db.query(Like).filter(Like.post_id == post_id, Like.user_id == current_user.id).first() is not None
-    
+        bookmarked_by_current_user = db.query(Bookmark).filter(Bookmark.post_id == post_id, Bookmark.user_id == current_user.id).first() is not None
+
     is_anon = bool(getattr(post, "is_anonymous", False))
     
     author_out = None
@@ -270,17 +478,20 @@ def get_post_by_id(
         "likes_count": int(likes_count),
         "comments_count": int(comments_count),
         "liked_by_current_user": liked_by_current_user,
+        "is_owner": bool(current_user and post.author_id == current_user.id),
+        "bookmarked_by_current_user": bookmarked_by_current_user,
     }
-    
+
     return JSONResponse(content=jsonable_encoder(result))
 
 
 @router.get("/user/{username}")
+@limiter.limit("60/minute")
 def get_user_posts(
     username: str,
     request: Request,
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1),
+    limit: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_current_user),
 ):
@@ -341,28 +552,34 @@ def get_user_posts(
         .all()
     )
     
-    # Check if current user liked
+    # Check if current user liked / bookmarked
     liked_set = set()
+    bookmarked_set = set()
     if current_user:
         liked_rows = db.query(Like.post_id).filter(
             Like.post_id.in_(post_ids),
             Like.user_id == current_user.id
         ).all()
         liked_set = {row[0] for row in liked_rows}
-    
+
+        bookmark_rows = db.query(Bookmark.post_id).filter(
+            Bookmark.post_id.in_(post_ids), Bookmark.user_id == current_user.id
+        ).all()
+        bookmarked_set = {row[0] for row in bookmark_rows}
+
     # Build response
     result = []
     for p in posts:
         avatar = user.avatar_url or "/profile-picture.png"
         if avatar and isinstance(avatar, str) and avatar.startswith("/"):
             avatar = f"{base}{avatar}"
-        
+
         author_out = {
             "id": user.id,
             "username": user.username,
             "avatar_url": avatar,
         }
-        
+
         item = {
             "id": p.id,
             "body": p.body,
@@ -374,28 +591,41 @@ def get_user_posts(
             "likes_count": int(likes_counts.get(p.id, 0)),
             "comments_count": int(comments_counts.get(p.id, 0)),
             "liked_by_current_user": bool(p.id in liked_set),
+            "is_owner": bool(current_user and user.id == current_user.id),
+            "bookmarked_by_current_user": bool(p.id in bookmarked_set),
         }
         result.append(item)
-    
+
     return JSONResponse(content=jsonable_encoder(result))
 
 
+MAX_FILES_PER_POST = 6
+
+
 @router.post("/create", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 async def create_post(
     request: Request,
     body: str = Form(""),
     files: List[UploadFile] = File([]),
     is_anonymous: bool = Form(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_current_user),
 ):
     """
     Create a post with optional files and an `is_anonymous` flag.
     - Expects Authorization: Bearer <token>
     - Returns serialized post suitable to prepend to the feed.
     """
-    print(is_anonymous)
-    post_kwargs: Dict[str, Any] = {"author_id": current_user.id, "body": body or ""}
+    body = body or ""
+    if len(body) > MAX_POST_BODY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Post body must be at most {MAX_POST_BODY_LENGTH} characters")
+    if not body.strip() and not files:
+        raise HTTPException(status_code=400, detail="Write something or attach a file")
+    if len(files) > MAX_FILES_PER_POST:
+        raise HTTPException(status_code=400, detail=f"You can attach at most {MAX_FILES_PER_POST} files")
+
+    post_kwargs: Dict[str, Any] = {"author_id": current_user.id, "body": body}
     if hasattr(Post, "is_anonymous"):
         post_kwargs["is_anonymous"] = bool(is_anonymous)
 
@@ -404,49 +634,52 @@ async def create_post(
     db.commit()
     db.refresh(post)
 
-    saved_media = []
+    if not is_anonymous:
+        _link_hashtags(db, post)
+
     try:
         for f in files:
-            # read file bytes
             try:
                 data = await f.read()
-            except Exception as e:
-                # cleanup and raise
+            except Exception:
                 db.delete(post)
                 db.commit()
-                raise HTTPException(status_code=400, detail=f"Failed reading file {f.filename}: {str(e)}")
+                logger.warning("Failed reading uploaded file for post creation, user_id=%s", current_user.id)
+                raise HTTPException(status_code=400, detail=f"Failed reading file {f.filename}")
 
-            # validate mime/size using your util
             try:
                 kind = validate_file(f.content_type, len(data))
-            except Exception as e:
+            except ValueError as e:
                 db.delete(post)
                 db.commit()
-                raise HTTPException(status_code=400, detail=f"Invalid file {f.filename}: {str(e)}")
+                raise HTTPException(status_code=400, detail=str(e))
 
-            fname = secure_filename(f.filename)
             try:
                 if kind == "image":
-                    url = save_image(data, fname)
+                    url = save_image(data, f.content_type)
                 else:
-                    url = save_video(data, fname)
-            except Exception as e:
+                    url = save_video(data, f.content_type)
+            except ValueError as e:
                 db.delete(post)
                 db.commit()
-                raise HTTPException(status_code=500, detail=f"Failed to save file {f.filename}: {str(e)}")
+                raise HTTPException(status_code=400, detail=str(e))
+            except Exception:
+                db.delete(post)
+                db.commit()
+                logger.exception("Failed to save uploaded file for user_id=%s", current_user.id)
+                raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
             media = PostMedia(post_id=post.id, url=url, media_type=kind)
             db.add(media)
-            saved_media.append(media)
 
         db.commit()
     except HTTPException:
         # re-raise client errors
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
-        # keep post row (or remove) - here we keep post but log and return 500
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logger.exception("Unexpected error creating post for user_id=%s", current_user.id)
+        raise HTTPException(status_code=500, detail="Failed to create post")
 
     # Build response: include full public urls for media using request.base_url
     base = str(request.base_url).rstrip("/")
@@ -454,9 +687,10 @@ async def create_post(
     media_rows = db.query(PostMedia).filter(PostMedia.post_id == post.id).order_by(getattr(PostMedia, "order", PostMedia.id)).all()
     media_out = []
     for m in media_rows:
+        url = f"{base}{m.url}" if m.url and m.url.startswith("/") else m.url
         media_out.append({
             "id": m.id,
-            "url": str(_public_url_to_local_path(m.url)),
+            "url": url,
             "media_type": m.media_type,
             "order": getattr(m, "order", None),
         })
@@ -481,11 +715,13 @@ async def create_post(
         "likes_count": 0,
         "comments_count": 0,
         "liked_by_current_user": False,
+        "is_owner": True,
     }
 
 
 @router.put("/{post_id}", summary="Update a post body (owner only)")
-def update_post(post_id: int, payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@limiter.limit("20/minute")
+def update_post(post_id: int, payload: dict, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
     """
     Expects JSON body: { "body": "new text" }.
     Only the author can edit.
@@ -498,9 +734,11 @@ def update_post(post_id: int, payload: dict, db: Session = Depends(get_db), curr
     if post.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    new_body = payload.get("body", "")
+    new_body = payload.get("body", "") if isinstance(payload, dict) else ""
     if not isinstance(new_body, str) or not new_body.strip():
         raise HTTPException(status_code=400, detail="Invalid body")
+    if len(new_body) > MAX_POST_BODY_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Post body must be at most {MAX_POST_BODY_LENGTH} characters")
 
     post.body = new_body.strip()
     db.add(post)
@@ -520,7 +758,8 @@ def update_post(post_id: int, payload: dict, db: Session = Depends(get_db), curr
 
 
 @router.delete("/{post_id}", summary="Delete a post (owner only)")
-def delete_post(post_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@limiter.limit("20/minute")
+def delete_post(post_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
     """
     Deletes the post row and removes related media files from disk.
     Cascade will remove PostMedia DB rows, but file deletion must be done manually.
@@ -541,8 +780,9 @@ def delete_post(post_id: int, db: Session = Depends(get_db), current_user: User 
     try:
         db.delete(post)
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
+        logger.exception("Failed to delete post_id=%s for user_id=%s", post_id, current_user.id)
         raise HTTPException(status_code=500, detail="Delete failed")
 
     for p in media_paths:

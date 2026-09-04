@@ -1,12 +1,24 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 from configuration.config import settings
+from models.models import User
+from routes.auth import require_current_user
+from utils.ratelimit import limiter
+
+logger = logging.getLogger("clickconnect.ai")
 
 router = APIRouter()
 
-client = genai.Client(api_key=settings.api_key)
+GEMINI_TIMEOUT_MS = 20_000
+
+client = genai.Client(
+    api_key=settings.api_key,
+    http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
+)
 
 SYSTEM_PROMPT = (
     "You are a specialized AI assistant designed STRICTLY for content writing and language translation.\n"
@@ -21,25 +33,42 @@ SYSTEM_PROMPT = (
     "- Detect the user's language and output content in that language unless asked otherwise.\n"
 )
 
+MAX_QUERY_LENGTH = 2000
+MAX_OUTPUT_TOKENS = 1024
+
+
 class ChatRequest(BaseModel):
-    query: str
+    query: str = Field(..., min_length=1, max_length=MAX_QUERY_LENGTH)
+
 
 class ChatResponse(BaseModel):
     reply: str
 
+
 @router.post("/api/chat", response_model=ChatResponse)
-def chatbot(payload: ChatRequest):
+@limiter.limit("15/minute")
+def chatbot(
+    request: Request,
+    payload: ChatRequest,
+    current_user: User = Depends(require_current_user),
+):
+    """Authenticated, rate-limited, and length-bounded proxy to Gemini.
+
+    Auth + rate limiting exist specifically to stop anonymous callers from
+    draining the (paid) Gemini quota; the frontend never talks to Gemini
+    directly and the API key never leaves this server.
+    """
     try:
         response = client.models.generate_content(
             model="gemini-flash-latest",
             contents=payload.query,
             config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_PROMPT,
+                system_instruction=SYSTEM_PROMPT,
+                max_output_tokens=MAX_OUTPUT_TOKENS,
             ),
         )
+        return ChatResponse(reply=response.text or "")
 
-        return ChatResponse(reply=response.text)
-
-    except Exception as exc:
-        print(exc)
-        raise HTTPException(status_code=500, detail=f"AI Error: {exc}")
+    except Exception:
+        logger.exception("Gemini request failed for user_id=%s", current_user.id)
+        raise HTTPException(status_code=502, detail="AI assistant is temporarily unavailable. Please try again.")
