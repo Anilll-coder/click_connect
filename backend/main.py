@@ -31,12 +31,12 @@ routes = [route.router, auth.router, uploads.router, interactions.router, posts.
 for router in routes:
     app.include_router(router)
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return ""
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check(db: Session = Depends(get_db)):
     """Pings Supabase via a real query so scheduled health checks (e.g. UptimeRobot)
     keep the free-tier project active, not just the web server."""
