@@ -17,6 +17,32 @@ export default function PostView() {
   const [commentSubmitting, setCommentSubmitting] = useState({});
 
   const isLoggedIn = !!getAuthToken();
+  const token = getAuthToken();
+
+  async function editPost(postId, body) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to update post");
+    }
+    setPost((prev) => (prev ? { ...prev, body } : prev));
+  }
+
+  async function deletePost(postId) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to delete post");
+    }
+    navigate("/");
+  }
 
   useEffect(() => {
     fetchPost();
@@ -185,6 +211,8 @@ export default function PostView() {
             submitComment={submitComment}
             fetchComments={fetchComments}
             setCommentInputs={setCommentInputs}
+            onEdit={editPost}
+            onDelete={deletePost}
           />
         )
       )}

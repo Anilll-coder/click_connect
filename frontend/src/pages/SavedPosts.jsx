@@ -1,13 +1,13 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { Ghost } from "lucide-react";
+import React, { useCallback, useEffect, useState } from "react";
+import { Bookmark } from "lucide-react";
 import PostCard from "../components/PostCard";
 import PostModal from "../components/PostModal";
-import { API_BASE, getAuthToken, isLoggedIn, isAnonymousTrue } from "../utils/helpers";
+import { API_BASE, getAuthToken } from "../utils/helpers";
 import { EmptyState, PostSkeleton } from "../components/ui";
 
 const PAGE_LIMIT = 12;
 
-export default function AnonymousPage() {
+export default function SavedPostsPage() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -20,52 +20,18 @@ export default function AnonymousPage() {
   const [selectedPost, setSelectedPost] = useState(null);
 
   const token = getAuthToken();
-  const authenticated = isLoggedIn();
-
-  async function editPost(postId, body) {
-    const res = await fetch(`${API_BASE}/posts/${postId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ body }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Failed to update post");
-    }
-    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body } : p)));
-  }
-
-  async function deletePost(postId) {
-    const res = await fetch(`${API_BASE}/posts/${postId}`, {
-      method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Failed to delete post");
-    }
-    setPosts((prev) => prev.filter((p) => p.id !== postId));
-  }
-
-  const keepAnonymous = (arr) =>
-    Array.isArray(arr) ? arr.filter((p) => isAnonymousTrue(p)) : [];
 
   async function fetchInitial() {
     setLoading(true);
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`${API_BASE}/posts?skip=0&limit=${PAGE_LIMIT}&is_anonymous=true`, { headers });
-      if (res.status === 401) {
-        localStorage.removeItem("cc_token");
-        return fetchInitial();
-      }
-      if (!res.ok) throw new Error("Failed to fetch posts");
-
+      const res = await fetch(`${API_BASE}/bookmarks?skip=0&limit=${PAGE_LIMIT}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch bookmarks");
       const body = await res.json();
-      let postsArr = Array.isArray(body) ? body : body?.posts || [];
-      const visible = keepAnonymous(postsArr);
-      setPosts(visible);
-      setSkip(visible.length);
+      const arr = Array.isArray(body) ? body : [];
+      setPosts(arr);
+      setSkip(arr.length);
     } catch (err) {
       console.error("fetchInitial error:", err);
     } finally {
@@ -77,19 +43,14 @@ export default function AnonymousPage() {
     if (loadingMore) return;
     setLoadingMore(true);
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`${API_BASE}/posts?skip=${skip}&limit=${PAGE_LIMIT}&is_anonymous=true`, { headers });
-      if (res.status === 401) {
-        localStorage.removeItem("cc_token");
-        return loadMore();
-      }
+      const res = await fetch(`${API_BASE}/bookmarks?skip=${skip}&limit=${PAGE_LIMIT}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error("Failed to load more");
-
       const body = await res.json();
-      let newPosts = Array.isArray(body) ? body : body?.posts || [];
-      const visible = keepAnonymous(newPosts);
-      setPosts((p) => [...p, ...visible]);
-      setSkip((s) => s + visible.length);
+      const arr = Array.isArray(body) ? body : [];
+      setPosts((p) => [...p, ...arr]);
+      setSkip((s) => s + arr.length);
     } catch (err) {
       console.error("loadMore error:", err);
     } finally {
@@ -104,7 +65,6 @@ export default function AnonymousPage() {
 
   const toggleLike = useCallback(
     async (postId) => {
-      if (!authenticated) return;
       try {
         const res = await fetch(`${API_BASE}/interactions/like/${postId}`, {
           method: "POST",
@@ -115,9 +75,7 @@ export default function AnonymousPage() {
         if (data && typeof data.liked !== "undefined") {
           setPosts((prev) =>
             prev.map((p) =>
-              p.id === postId
-                ? { ...p, liked_by_current_user: data.liked, likes_count: data.likes_count }
-                : p
+              p.id === postId ? { ...p, liked_by_current_user: data.liked, likes_count: data.likes_count } : p
             )
           );
         }
@@ -125,8 +83,33 @@ export default function AnonymousPage() {
         console.error("toggleLike error:", err);
       }
     },
-    [token, authenticated]
+    [token]
   );
+
+  async function editPost(postId, body) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to update post");
+    }
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body } : p)));
+  }
+
+  async function deletePost(postId) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to delete post");
+    }
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  }
 
   async function fetchComments(postId, more = false) {
     setCommentsMap((m) => ({ ...(m || {}), [postId]: { ...(m?.[postId] || {}), loading: true } }));
@@ -134,15 +117,11 @@ export default function AnonymousPage() {
     const skipVal = more ? current.skip || current.items.length || 0 : 0;
 
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(
-        `${API_BASE}/interactions/comments/${postId}?skip=${skipVal}&limit=20`,
-        { headers }
-      );
+      const res = await fetch(`${API_BASE}/interactions/comments/${postId}?skip=${skipVal}&limit=20`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error("Failed to fetch comments");
       const data = await res.json();
-      if (!Array.isArray(data)) throw new Error("Unexpected comments response");
-
       setCommentsMap((m) => {
         const prev = m?.[postId] || { items: [], skip: 0 };
         return {
@@ -178,7 +157,6 @@ export default function AnonymousPage() {
   }
 
   async function submitComment(postId) {
-    if (!authenticated) return;
     const text = (commentInputs[postId] || "").trim();
     if (!text || commentSubmitting[postId]) return;
 
@@ -186,28 +164,17 @@ export default function AnonymousPage() {
     try {
       const res = await fetch(`${API_BASE}/interactions/comment/${postId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error("Failed to post comment");
       const created = await res.json();
-      if (!created || !created.id) throw new Error("Unexpected comment response");
 
       setCommentsMap((m) => {
         const prev = m?.[postId] || { items: [], skip: 0 };
-        return {
-          ...m,
-          [postId]: {
-            items: [...(prev.items || []), created],
-            skip: (prev.skip || prev.items.length || 0) + 1,
-            loading: false,
-            more: prev.more || false,
-          },
-        };
+        return { ...m, [postId]: { ...prev, items: [...(prev.items || []), created] } };
       });
-      setPosts((p) =>
-        p.map((post) => (post.id === postId ? { ...post, comments_count: (post.comments_count || 0) + 1 } : post))
-      );
+      setPosts((p) => p.map((post) => (post.id === postId ? { ...post, comments_count: (post.comments_count || 0) + 1 } : post)));
       setCommentInputs((c) => ({ ...(c || {}), [postId]: "" }));
     } catch (err) {
       console.error("submitComment error:", err);
@@ -220,11 +187,11 @@ export default function AnonymousPage() {
     <div className="page">
       <header className="animate-fade-in flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Anonymous</h1>
-          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Whisper freely. No names attached.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">Saved Posts</h1>
+          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">Posts you've bookmarked to read later</p>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-700 to-slate-900 text-white shadow-lg shadow-slate-900/30">
-          <Ghost className="h-5 w-5" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-500/30">
+          <Bookmark className="h-5 w-5" />
         </div>
       </header>
 
@@ -232,18 +199,12 @@ export default function AnonymousPage() {
         <div className="space-y-5">
           <PostSkeleton />
           <PostSkeleton />
-          <PostSkeleton />
         </div>
       ) : posts.length === 0 ? (
         <EmptyState
-          icon={Ghost}
-          title="No secrets shared yet"
-          message="Be the first to share an anonymous thought."
-          action={
-            <button onClick={() => window.location.assign("/create")} className="btn-primary">
-              Post anonymously
-            </button>
-          }
+          icon={Bookmark}
+          title="No saved posts yet"
+          message="Tap the bookmark icon on any post to save it here."
         />
       ) : (
         <div className="space-y-5">
@@ -255,7 +216,7 @@ export default function AnonymousPage() {
               openCommentsFor={openCommentsFor}
               commentInputs={commentInputs}
               commentSubmitting={commentSubmitting}
-              isLoggedIn={authenticated}
+              isLoggedIn={true}
               toggleLike={toggleLike}
               openComments={openComments}
               submitComment={submitComment}
@@ -271,23 +232,16 @@ export default function AnonymousPage() {
 
       {!loading && posts.length > 0 && posts.length >= PAGE_LIMIT && (
         <div className="flex flex-col items-center gap-3 py-4">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="btn-secondary min-w-44"
-          >
+          <button onClick={loadMore} disabled={loadingMore} className="btn-secondary min-w-44">
             {loadingMore ? (
               <>
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 dark:border-slate-600 border-t-blue-500" />
                 Loading...
               </>
             ) : (
-              "Load More Secrets"
+              "Load More"
             )}
           </button>
-          {posts.length === skip && !loadingMore && (
-            <p className="text-xs text-gray-400 dark:text-gray-500">You've reached the end of the secrets!</p>
-          )}
         </div>
       )}
 
@@ -298,7 +252,7 @@ export default function AnonymousPage() {
         openCommentsFor={openCommentsFor}
         commentInputs={commentInputs}
         commentSubmitting={commentSubmitting}
-        isLoggedIn={authenticated}
+        isLoggedIn={true}
         toggleLike={toggleLike}
         openComments={openComments}
         submitComment={submitComment}

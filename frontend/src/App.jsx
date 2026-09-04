@@ -14,6 +14,8 @@ import SettingsPage from './pages/Settings'
 import UserProfilePage from './pages/UserProfile'
 import PostView from './pages/PostView'
 import NotFound from './pages/NotFound'
+import SavedPostsPage from './pages/SavedPosts'
+import HashtagFeedPage from './pages/HashtagFeed'
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
               <Route path='/post/:id' element={<Layout><PostView/></Layout>}/>
               <Route path='/login' element={<AuthPage/>}/>
               <Route path='/bot' element={<Layout><ClickConnectChatbot/></Layout>}/>
+              <Route path='/saved' element={<Layout><ProtectedRoute><SavedPostsPage/></ProtectedRoute></Layout>}/>
+              <Route path='/hashtag/:tag' element={<Layout><HashtagFeedPage/></Layout>}/>
               <Route path='*' element={<Layout><NotFound/></Layout>}/>
           </Routes>
       </BrowserRouter>

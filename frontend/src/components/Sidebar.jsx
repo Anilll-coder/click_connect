@@ -7,6 +7,7 @@ import {
   Ghost,
   Bell,
   Settings,
+  Bookmark,
   X,
 } from "lucide-react";
 import { API_BASE, getAuthToken } from "../utils/helpers";
@@ -16,6 +17,7 @@ const navItems = [
   { id: "/myposts", label: "My Posts", icon: FileText },
   { id: "/create", label: "Create Post", icon: Bot },
   { id: "/anonymous", label: "Anonymous", icon: Ghost },
+  { id: "/saved", label: "Saved Posts", icon: Bookmark },
   { id: "/bot", label: "AI Chatbot", icon: Bot },
   { id: "/notifications", label: "Notifications", icon: Bell },
   { id: "/settings", label: "Settings", icon: Settings },

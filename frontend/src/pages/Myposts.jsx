@@ -14,12 +14,14 @@ import {
   X,
 } from "lucide-react";
 import { API_BASE, getAuthToken, resolveAsset, timeAgo } from "../utils/helpers";
-import { EmptyState, PostSkeleton } from "../components/ui";
+import { EmptyState, PostSkeleton, ConfirmDialog } from "../components/ui";
+import { useToast } from "../components/toastContext";
 import PostModal from "../components/PostModal";
 
 export default function MyPosts() {
   const token = getAuthToken();
   const nav = useNavigate();
+  const toast = useToast();
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,7 @@ export default function MyPosts() {
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [commentsOpen, setCommentsOpen] = useState({});
   const [commentsCache, setCommentsCache] = useState({});
   const [commentDrafts, setCommentDrafts] = useState({});
@@ -70,8 +73,14 @@ export default function MyPosts() {
     }
   }
 
-  async function handleDelete(postId) {
-    if (!confirm("Delete this post? This action cannot be undone.")) return;
+  function handleDelete(postId) {
+    setConfirmDeleteId(postId);
+  }
+
+  async function confirmDelete() {
+    const postId = confirmDeleteId;
+    if (!postId) return;
+    setConfirmDeleteId(null);
     setDeleting(postId);
     const old = posts;
     setPosts((prev) => prev.filter((p) => p.id !== postId));
@@ -85,8 +94,9 @@ export default function MyPosts() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Delete failed");
       }
+      toast.success("Post deleted");
     } catch (err) {
-      alert(err.message || "Delete failed");
+      toast.error(err.message || "Delete failed");
     } finally {
       setDeleting(null);
     }
@@ -101,7 +111,7 @@ export default function MyPosts() {
 
   async function saveEdit() {
     if (!editing || !editing.text.trim()) {
-      alert("Post body cannot be empty");
+      toast.error("Post body cannot be empty");
       return;
     }
     const { id, text } = editing;
@@ -126,8 +136,9 @@ export default function MyPosts() {
       }
       const updated = await res.json();
       setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, body: updated.body } : p)));
+      toast.success("Post updated");
     } catch (err) {
-      alert(err.message || "Save failed");
+      toast.error(err.message || "Save failed");
       setPosts(old);
     }
   }
@@ -176,7 +187,7 @@ export default function MyPosts() {
         );
       }
     } catch (err) {
-      alert(err.message || "Failed to update like");
+      toast.error(err.message || "Failed to update like");
     } finally {
       setLiking((prev) => ({ ...prev, [postId]: false }));
     }
@@ -196,7 +207,7 @@ export default function MyPosts() {
       setCommentsCache((prev) => ({ ...prev, [postId]: data }));
       setCommentsOpen((prev) => ({ ...prev, [postId]: true }));
     } catch (err) {
-      alert(err.message || "Could not load comments");
+      toast.error(err.message || "Could not load comments");
     }
   }
 
@@ -267,7 +278,7 @@ export default function MyPosts() {
         return { ...prev, [postId]: arr.map((c) => (c.is_temp ? created : c)) };
       });
     } catch (err) {
-      alert(err.message || "Failed to post comment");
+      toast.error(err.message || "Failed to post comment");
       setCommentsCache((prev) => {
         const arr = (prev[postId] || []).filter((c) => !c.is_temp);
         return { ...prev, [postId]: arr };
@@ -566,6 +577,16 @@ export default function MyPosts() {
         submitComment={postComment}
         fetchComments={(postId) => ensureComments(postId)}
         setCommentInputs={setCommentDrafts}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDeleteId !== null}
+        title="Delete this post?"
+        message="This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleting === confirmDeleteId}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteId(null)}
       />
     </div>
   );

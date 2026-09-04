@@ -1,21 +1,26 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FileText, Mail, CalendarDays } from "lucide-react";
+import { FileText, Mail, CalendarDays, UserPlus, UserCheck } from "lucide-react";
 import PostCard from "../components/PostCard";
 import PostModal from "../components/PostModal";
+import FollowListModal from "../components/FollowListModal";
 import { API_BASE, getAuthToken, isLoggedIn, resolveAsset } from "../utils/helpers";
 import { EmptyState, PostSkeleton } from "../components/ui";
+import { useToast } from "../components/toastContext";
 
 const PAGE_LIMIT = 12;
 
 export default function UserProfilePage() {
   const { username } = useParams();
+  const toast = useToast();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [skip, setSkip] = useState(0);
   const [userInfo, setUserInfo] = useState(null);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [followListKind, setFollowListKind] = useState(null);
 
   const [commentsMap, setCommentsMap] = useState({});
   const [openCommentsFor, setOpenCommentsFor] = useState(null);
@@ -26,15 +31,76 @@ export default function UserProfilePage() {
   const token = getAuthToken();
   const authenticated = isLoggedIn();
 
+  async function editPost(postId, body) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to update post");
+    }
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body } : p)));
+  }
+
+  async function deletePost(postId) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to delete post");
+    }
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  }
+
   async function fetchUserProfile() {
     try {
-      const res = await fetch(`${API_BASE}/auth/user/${username}`);
+      const res = await fetch(`${API_BASE}/auth/user/${username}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.ok) {
         const data = await res.json();
         setUserInfo(data);
       }
     } catch (err) {
       console.error("fetchUserProfile error:", err);
+    }
+  }
+
+  async function toggleFollow() {
+    if (!authenticated) {
+      window.location.assign("/login");
+      return;
+    }
+    if (followBusy || !userInfo) return;
+    setFollowBusy(true);
+    const wasFollowing = userInfo.is_following;
+    setUserInfo((prev) => ({
+      ...prev,
+      is_following: !wasFollowing,
+      followers_count: (prev.followers_count || 0) + (wasFollowing ? -1 : 1),
+    }));
+    try {
+      const res = await fetch(`${API_BASE}/follow/${username}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to update follow status");
+      const data = await res.json();
+      setUserInfo((prev) => ({ ...prev, is_following: data.following }));
+      toast.success(data.following ? `You're now following ${username}` : `Unfollowed ${username}`);
+    } catch (err) {
+      setUserInfo((prev) => ({
+        ...prev,
+        is_following: wasFollowing,
+        followers_count: (prev.followers_count || 0) + (wasFollowing ? 1 : -1),
+      }));
+      toast.error(err.message || "Failed to update follow status");
+    } finally {
+      setFollowBusy(false);
     }
   }
 
@@ -218,6 +284,16 @@ export default function UserProfilePage() {
                 alt={userInfo.username}
                 className="h-24 w-24 rounded-2xl border-4 border-white object-cover shadow-xl dark:border-slate-800 sm:h-28 sm:w-28"
               />
+              {!userInfo.is_self && (
+                <button
+                  onClick={toggleFollow}
+                  disabled={followBusy}
+                  className={userInfo.is_following ? "btn-secondary" : "btn-primary"}
+                >
+                  {userInfo.is_following ? <UserCheck className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                  {userInfo.is_following ? "Following" : "Follow"}
+                </button>
+              )}
             </div>
             <div className="mt-4">
               <h1 className="flex items-center gap-2 text-2xl font-extrabold tracking-tight text-gray-900 dark:text-gray-50">
@@ -226,8 +302,20 @@ export default function UserProfilePage() {
               <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500 dark:text-gray-400">
                 <span className="flex items-center gap-1.5">
                   <FileText className="h-4 w-4 text-gray-400 dark:text-gray-500" />
-                  {posts.length} public {posts.length === 1 ? "post" : "posts"}
+                  {userInfo.posts_count ?? posts.length} public {(userInfo.posts_count ?? posts.length) === 1 ? "post" : "posts"}
                 </span>
+                <button
+                  onClick={() => setFollowListKind("followers")}
+                  className="flex items-center gap-1.5 font-semibold text-gray-700 hover:underline dark:text-gray-200"
+                >
+                  {userInfo.followers_count ?? 0} followers
+                </button>
+                <button
+                  onClick={() => setFollowListKind("following")}
+                  className="flex items-center gap-1.5 font-semibold text-gray-700 hover:underline dark:text-gray-200"
+                >
+                  {userInfo.following_count ?? 0} following
+                </button>
                 {userInfo.email && (
                   <span className="flex items-center gap-1.5">
                     <Mail className="h-4 w-4 text-gray-400 dark:text-gray-500" />
@@ -278,6 +366,8 @@ export default function UserProfilePage() {
               fetchComments={fetchComments}
               setCommentInputs={setCommentInputs}
               onOpen={openPostModal}
+              onEdit={editPost}
+              onDelete={deletePost}
             />
           ))}
         </div>
@@ -314,6 +404,18 @@ export default function UserProfilePage() {
         submitComment={submitComment}
         fetchComments={fetchComments}
         setCommentInputs={setCommentInputs}
+        onEdit={editPost}
+        onDelete={async (postId) => {
+          await deletePost(postId);
+          closePostModal();
+        }}
+      />
+
+      <FollowListModal
+        username={username}
+        kind={followListKind}
+        isOpen={!!followListKind}
+        onClose={() => setFollowListKind(null)}
       />
     </div>
   );

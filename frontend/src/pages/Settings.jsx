@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Camera, Save, User, Mail, PenLine, CheckCircle2 } from "lucide-react";
+import { Camera, Save, User, Mail, PenLine, CheckCircle2, UserX, ShieldAlert, Trash2 } from "lucide-react";
 import useAuth from "../utils/useAuth";
 import { API_BASE, getAuthToken, resolveAsset } from "../utils/helpers";
+import { ConfirmDialog } from "../components/ui";
+import { useToast } from "../components/toastContext";
 
 export default function SettingsPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const { user: authUser, setUser: setAuthUser } = useAuth() || {};
   const [username, setUsername] = useState(authUser?.username ?? "");
   const [email, setEmail] = useState(authUser?.email ?? "");
@@ -17,7 +20,55 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState(null);
   const [err, setErr] = useState(null);
 
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [blockedLoading, setBlockedLoading] = useState(true);
+  const [unblockingId, setUnblockingId] = useState(null);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
   const token = getAuthToken();
+
+  useEffect(() => {
+    fetch(`${API_BASE}/moderation/blocked`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setBlockedUsers(Array.isArray(data) ? data : []))
+      .catch(() => setBlockedUsers([]))
+      .finally(() => setBlockedLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function unblockUser(u) {
+    setUnblockingId(u.id);
+    try {
+      const res = await fetch(`${API_BASE}/moderation/block/${u.username}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to unblock user");
+      setBlockedUsers((prev) => prev.filter((x) => x.id !== u.id));
+      toast.success(`Unblocked ${u.username}`);
+    } catch (e) {
+      toast.error(e.message || "Failed to unblock user");
+    } finally {
+      setUnblockingId(null);
+    }
+  }
+
+  async function deleteAccount() {
+    setDeletingAccount(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to delete account");
+      localStorage.removeItem("cc_token");
+      window.location.assign("/");
+    } catch (e) {
+      toast.error(e.message || "Failed to delete account");
+      setDeletingAccount(false);
+    }
+  }
 
   useEffect(() => {
     setUsername(authUser?.username ?? "");
@@ -195,6 +246,76 @@ export default function SettingsPage() {
           </div>
         </form>
       </motion.div>
+
+      {/* Blocked users */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="card p-6"
+      >
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-gray-50">
+          <UserX className="h-5 w-5 text-gray-400 dark:text-gray-500" />
+          Blocked Users
+        </h2>
+        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+          People you've blocked won't appear in your feed.
+        </p>
+        {blockedLoading ? (
+          <p className="text-sm text-gray-400 dark:text-gray-500">Loading...</p>
+        ) : blockedUsers.length === 0 ? (
+          <p className="text-sm text-gray-400 dark:text-gray-500">You haven't blocked anyone.</p>
+        ) : (
+          <div className="space-y-2">
+            {blockedUsers.map((u) => (
+              <div key={u.id} className="flex items-center justify-between rounded-xl border border-gray-100 p-3 dark:border-slate-700">
+                <div className="flex items-center gap-3">
+                  <img src={resolveAsset(u.avatar_url)} alt={u.username} className="h-9 w-9 rounded-full object-cover" />
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">{u.username}</span>
+                </div>
+                <button
+                  onClick={() => unblockUser(u)}
+                  disabled={unblockingId === u.id}
+                  className="btn-secondary px-3 py-1.5 text-xs"
+                >
+                  {unblockingId === u.id ? "Unblocking..." : "Unblock"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
+      {/* Danger zone */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="card border-red-100 p-6 dark:border-red-500/20"
+      >
+        <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-rose-600 dark:text-rose-400">
+          <ShieldAlert className="h-5 w-5" />
+          Danger Zone
+        </h2>
+        <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+          Permanently delete your account and everything you've posted. This cannot be undone.
+        </p>
+        <button
+          onClick={() => setConfirmDeleteAccount(true)}
+          className="flex items-center gap-2 rounded-xl border border-rose-200 px-4 py-2.5 text-sm font-semibold text-rose-600 transition-colors hover:bg-rose-50 dark:border-rose-500/30 dark:text-rose-400 dark:hover:bg-rose-500/10"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete my account
+        </button>
+      </motion.div>
+
+      <ConfirmDialog
+        isOpen={confirmDeleteAccount}
+        title="Delete your account?"
+        message="This permanently deletes your account, posts, comments, and all related data. This cannot be undone."
+        confirmLabel="Delete account"
+        loading={deletingAccount}
+        onConfirm={deleteAccount}
+        onCancel={() => setConfirmDeleteAccount(false)}
+      />
     </div>
   );
 }

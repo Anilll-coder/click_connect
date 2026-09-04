@@ -15,6 +15,8 @@ export default function PostModal({
   submitComment,
   fetchComments,
   setCommentInputs,
+  onEdit,
+  onDelete,
 }) {
   useEffect(() => {
     if (!post) return;
@@ -63,6 +65,8 @@ export default function PostModal({
               setCommentInputs={setCommentInputs}
               insideModal
               onClose={onClose}
+              onEdit={onEdit}
+              onDelete={onDelete}
             />
           </motion.div>
         </motion.div>

@@ -1,6 +1,6 @@
-import React from "react";
-import { motion } from "framer-motion";
-import { Inbox } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Inbox, MoreHorizontal } from "lucide-react";
 
 export function Loader({ label = "Loading..." }) {
   return (
@@ -52,6 +52,217 @@ export function PostSkeleton() {
         <div className="h-5 w-16 rounded-full bg-gray-100 dark:bg-slate-700/50" />
       </div>
     </div>
+  );
+}
+
+export function ConfirmDialog({
+  isOpen,
+  title = "Are you sure?",
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  danger = true,
+  loading = false,
+  onConfirm,
+  onCancel,
+}) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel?.();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, onCancel]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onCancel}
+          role="presentation"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm dark:bg-black/60"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-dialog-title"
+            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+          >
+            <h3 id="confirm-dialog-title" className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">
+              {title}
+            </h3>
+            {message && <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">{message}</p>}
+            <div className="flex justify-end gap-3">
+              <button onClick={onCancel} className="btn-secondary" disabled={loading}>
+                {cancelLabel}
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={loading}
+                className={`rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-60 ${
+                  danger ? "bg-rose-600 hover:bg-rose-700" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {loading ? "Please wait..." : confirmLabel}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+export function ReportDialog({ isOpen, title = "Report content", loading = false, onSubmit, onCancel }) {
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    if (isOpen) setReason("");
+  }, [isOpen]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={onCancel}
+          role="presentation"
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-gray-900/50 p-4 backdrop-blur-sm dark:bg-black/60"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-sm rounded-2xl border border-gray-100 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-800"
+          >
+            <h3 className="mb-2 text-lg font-bold text-gray-900 dark:text-gray-50">{title}</h3>
+            <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">
+              Tell us what's wrong. Our team will review it.
+            </p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for reporting..."
+              className="input min-h-[90px] resize-none"
+              maxLength={500}
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={onCancel} className="btn-secondary" disabled={loading}>
+                Cancel
+              </button>
+              <button
+                onClick={() => onSubmit(reason.trim())}
+                disabled={loading || reason.trim().length < 3}
+                className="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:opacity-50"
+              >
+                {loading ? "Submitting..." : "Submit report"}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+export function Dropdown({ trigger, children, align = "right" }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      {trigger ? (
+        React.cloneElement(trigger, {
+          onClick: (e) => {
+            e.stopPropagation();
+            trigger.props.onClick?.(e);
+            setOpen((o) => !o);
+          },
+          "aria-haspopup": "menu",
+          "aria-expanded": open,
+        })
+      ) : (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label="More options"
+          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-slate-700/50 dark:hover:text-gray-300"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+        </button>
+      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.12 }}
+            role="menu"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+            className={`absolute z-30 mt-1.5 min-w-40 overflow-hidden rounded-xl border border-gray-100 bg-white py-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800 ${
+              align === "right" ? "right-0" : "left-0"
+            }`}
+          >
+            {children}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+export function DropdownItem({ icon: Icon, children, danger = false, ...props }) {
+  return (
+    <button
+      role="menuitem"
+      className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium transition-colors ${
+        danger
+          ? "text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10"
+          : "text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-slate-700/50"
+      }`}
+      {...props}
+    >
+      {Icon && <Icon className="h-4 w-4" />}
+      {children}
+    </button>
   );
 }
 

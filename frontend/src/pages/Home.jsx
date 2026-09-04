@@ -8,6 +8,7 @@ import { EmptyState, PostSkeleton } from "../components/ui";
 const PAGE_LIMIT = 12;
 
 export default function HomePage() {
+  const [feedTab, setFeedTab] = useState("forYou");
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -22,18 +23,50 @@ export default function HomePage() {
   const token = getAuthToken();
   const authenticated = isLoggedIn();
 
+  async function editPost(postId, body) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to update post");
+    }
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body } : p)));
+  }
+
+  async function deletePost(postId) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to delete post");
+    }
+    setPosts((prev) => prev.filter((p) => p.id !== postId));
+  }
+
   const keepNonAnonymous = (arr) =>
     Array.isArray(arr) ? arr.filter((p) => !isAnonymousTrue(p)) : [];
+
+  function feedUrl(skipVal) {
+    return feedTab === "following"
+      ? `${API_BASE}/posts/feed/following?skip=${skipVal}&limit=${PAGE_LIMIT}`
+      : `${API_BASE}/posts?skip=${skipVal}&limit=${PAGE_LIMIT}`;
+  }
 
   async function fetchInitial() {
     setLoading(true);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const res = await fetch(`${API_BASE}/posts?skip=0&limit=${PAGE_LIMIT}`, { headers });
+      const res = await fetch(feedUrl(0), { headers });
       if (res.status === 401) {
         localStorage.removeItem("cc_token");
-        return fetchInitial();
+        setFeedTab("forYou");
+        return;
       }
       if (!res.ok) throw new Error("Failed to fetch posts");
 
@@ -54,11 +87,7 @@ export default function HomePage() {
     setLoadingMore(true);
     try {
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`${API_BASE}/posts?skip=${skip}&limit=${PAGE_LIMIT}`, { headers });
-      if (res.status === 401) {
-        localStorage.removeItem("cc_token");
-        return loadMore();
-      }
+      const res = await fetch(feedUrl(skip), { headers });
       if (!res.ok) throw new Error("Failed to load more");
 
       const body = await res.json();
@@ -76,7 +105,7 @@ export default function HomePage() {
   useEffect(() => {
     fetchInitial();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [feedTab]);
 
   const toggleLike = useCallback(
     async (postId) => {
@@ -206,6 +235,27 @@ export default function HomePage() {
         </div>
       </header>
 
+      {authenticated && (
+        <div className="flex gap-1 rounded-xl bg-gray-100 p-1 dark:bg-slate-800/60">
+          {[
+            { id: "forYou", label: "For You" },
+            { id: "following", label: "Following" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setFeedTab(tab.id)}
+              className={`flex-1 rounded-lg py-2 text-sm font-semibold transition-all ${
+                feedTab === tab.id
+                  ? "bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-sky-400"
+                  : "text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-5">
           <PostSkeleton />
@@ -213,15 +263,22 @@ export default function HomePage() {
           <PostSkeleton />
         </div>
       ) : posts.length === 0 ? (
-        <EmptyState
-          title="No posts yet"
-          message="Be the first to share something amazing with the community."
-          action={
-            <button onClick={() => window.location.assign("/create")} className="btn-primary">
-              Create a post
-            </button>
-          }
-        />
+        feedTab === "following" ? (
+          <EmptyState
+            title="Nothing here yet"
+            message="Posts from people you follow will show up here. Try following someone from their profile."
+          />
+        ) : (
+          <EmptyState
+            title="No posts yet"
+            message="Be the first to share something amazing with the community."
+            action={
+              <button onClick={() => window.location.assign("/create")} className="btn-primary">
+                Create a post
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="space-y-5">
           {posts.map((p) => (
@@ -239,6 +296,8 @@ export default function HomePage() {
               fetchComments={fetchComments}
               setCommentInputs={setCommentInputs}
               onOpen={openPostModal}
+              onEdit={editPost}
+              onDelete={deletePost}
             />
           ))}
         </div>
@@ -279,6 +338,11 @@ export default function HomePage() {
         submitComment={submitComment}
         fetchComments={fetchComments}
         setCommentInputs={setCommentInputs}
+        onEdit={editPost}
+        onDelete={async (postId) => {
+          await deletePost(postId);
+          closePostModal();
+        }}
       />
     </div>
   );

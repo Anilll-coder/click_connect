@@ -1,16 +1,37 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { LogOut, Menu, Moon, PenSquare, Sun } from "lucide-react";
+import { LogOut, Menu, Moon, PenSquare, Search as SearchIcon, Sun, X } from "lucide-react";
 import useAuth from "../utils/useAuth";
 import { resolveAsset } from "../utils/helpers";
 import { BrandBadge } from "./ui";
 import { useTheme } from "../utils/theme";
+import SearchBar from "./SearchBar";
 
 export default function TopBar({ onOpenMenu, onCloseMenu }) {
   const navigate = useNavigate();
   const { user, isLoggedIn, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  if (mobileSearchOpen) {
+    return (
+      <header className="fixed inset-x-0 top-0 z-50 border-b border-gray-200/70 dark:border-slate-700/70 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl sm:hidden">
+        <div className="flex h-16 items-center gap-2 px-4">
+          <div className="flex-1">
+            <SearchBar autoFocus onNavigate={() => setMobileSearchOpen(false)} />
+          </div>
+          <button
+            onClick={() => setMobileSearchOpen(false)}
+            aria-label="Close search"
+            className="rounded-xl p-2 text-gray-500 dark:text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-gray-200/70 dark:border-slate-700/70 bg-white/80 dark:bg-slate-900/70 backdrop-blur-xl">
@@ -36,7 +57,19 @@ export default function TopBar({ onOpenMenu, onCloseMenu }) {
           </button>
         </div>
 
+        <div className="mx-4 hidden max-w-xs flex-1 sm:block">
+          <SearchBar />
+        </div>
+
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setMobileSearchOpen(true)}
+            aria-label="Search"
+            className="rounded-xl p-2 text-gray-500 dark:text-gray-400 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50 sm:hidden"
+          >
+            <SearchIcon className="h-5 w-5" />
+          </button>
+
           <button
             onClick={toggleTheme}
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}

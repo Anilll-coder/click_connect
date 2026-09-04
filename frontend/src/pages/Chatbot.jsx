@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Send, Mic, Sparkles, Copy, Loader, MessageSquare, RefreshCw } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { API_BASE } from "../utils/helpers";
+import { API_BASE, getAuthToken, isLoggedIn } from "../utils/helpers";
+import { useToast } from "../components/toastContext";
 
 function copyToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -56,6 +57,7 @@ const SUGGESTIONS = [
 
 export default function Chatbot() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [messages, setMessages] = useState(() => {
     try {
       const saved = localStorage.getItem("cc_chat_history_ui");
@@ -105,7 +107,7 @@ export default function Chatbot() {
 
   const toggleVoiceInput = () => {
     if (!recognitionRef.current) {
-      alert("Voice input is not supported in this browser.");
+      toast.info("Voice input is not supported in this browser.");
       return;
     }
     if (isListening) {
@@ -117,12 +119,22 @@ export default function Chatbot() {
   };
 
   async function sendMessageToApi(query) {
+    const token = getAuthToken();
     try {
       const response = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ query }),
       });
+      if (response.status === 401) {
+        return "Please log in to use the AI assistant.";
+      }
+      if (response.status === 429) {
+        return "You're sending messages too quickly. Please wait a moment and try again.";
+      }
       if (!response.ok) throw new Error("Network response was not ok");
       const data = await response.json();
       return data.reply;
@@ -136,6 +148,10 @@ export default function Chatbot() {
     e?.preventDefault();
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
+    if (!isLoggedIn()) {
+      navigate("/login");
+      return;
+    }
 
     const userMsg = { id: Date.now() + Math.random(), role: "user", text: trimmed };
     setMessages((m) => [...m, userMsg]);
@@ -288,7 +304,7 @@ export default function Chatbot() {
                     handleSend();
                   }
                 }}
-                placeholder="Type a message..."
+                placeholder={isLoggedIn() ? "Type a message..." : "Log in to use the AI assistant..."}
                 className="w-full resize-none rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3 pr-12 text-sm outline-none transition-all focus:border-blue-400 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-blue-100 dark:focus:ring-sky-500/20"
                 rows={1}
                 style={{ minHeight: "50px", maxHeight: "120px" }}
