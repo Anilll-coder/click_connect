@@ -227,7 +227,7 @@ export default function PostCard({
               className={`h-11 w-11 rounded-full object-cover ring-2 ${
                 isAnon
                   ? "ring-gray-200 dark:ring-slate-700"
-                  : "cursor-pointer ring-blue-100 transition-all hover:ring-blue-300"
+                  : "cursor-pointer ring-blue-100 dark:ring-slate-700 transition-all hover:ring-blue-300 dark:hover:ring-sky-500/50"
               }`}
             />
             {isAnon && (
@@ -255,7 +255,7 @@ export default function PostCard({
         {onClose && (
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-600 dark:text-gray-300"
+            className="rounded-lg p-2 text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-600 dark:hover:text-gray-300"
             title="Close"
           >
             <X className="h-5 w-5" />

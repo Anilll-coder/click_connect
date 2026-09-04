@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from database.db import engine
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from database.db import engine, get_db
 from models.models import Base
 from routes import auth, route, uploads, interactions, posts, notifications
 
@@ -31,3 +34,14 @@ for router in routes:
 @app.get("/")
 def read_root():
     return ""
+
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Pings Supabase via a real query so scheduled health checks (e.g. UptimeRobot)
+    keep the free-tier project active, not just the web server."""
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "error", "supabase": "unreachable"})
+    return {"status": "ok", "supabase": "connected"}

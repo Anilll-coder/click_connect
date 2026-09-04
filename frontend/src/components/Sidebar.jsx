@@ -30,7 +30,7 @@ function NavItem({ to, label, icon: Icon, badge = 0, onClick, onDesktop = false 
         `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
           isActive
             ? "bg-gradient-to-r from-blue-50 to-sky-50 text-blue-700 dark:from-slate-800 dark:to-slate-700 dark:text-sky-400"
-            : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-900 dark:text-gray-50"
+            : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-900 dark:hover:text-gray-50"
         }`
       }
     >
@@ -120,7 +120,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
               </span>
               <button
                 onClick={onClose}
-                className="rounded-xl p-2 text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:text-gray-200"
+                className="rounded-xl p-2 text-gray-400 dark:text-gray-500 transition-colors hover:bg-gray-100 dark:hover:bg-slate-700/50 hover:text-gray-700 dark:hover:text-gray-200"
                 aria-label="Close menu"
               >
                 <X className="h-5 w-5" />

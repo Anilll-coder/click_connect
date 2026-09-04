@@ -13,6 +13,7 @@ import NotificationsPage from './pages/Notifications'
 import SettingsPage from './pages/Settings'
 import UserProfilePage from './pages/UserProfile'
 import PostView from './pages/PostView'
+import NotFound from './pages/NotFound'
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
               <Route path='/post/:id' element={<Layout><PostView/></Layout>}/>
               <Route path='/login' element={<AuthPage/>}/>
               <Route path='/bot' element={<Layout><ClickConnectChatbot/></Layout>}/>
+              <Route path='*' element={<Layout><NotFound/></Layout>}/>
           </Routes>
       </BrowserRouter>
     </>

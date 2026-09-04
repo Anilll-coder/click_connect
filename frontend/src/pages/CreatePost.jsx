@@ -145,7 +145,7 @@ export default function PostCreator({ onPosted }) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 p-4"
+              className="border-b border-gray-100 dark:border-slate-700 bg-gray-50/50 dark:bg-slate-800/40 p-4"
             >
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {previews.map((p, i) => (

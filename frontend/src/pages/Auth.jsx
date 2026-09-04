@@ -224,7 +224,7 @@ export default function Auth() {
                   className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all ${
                     mode === m
                       ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-sky-400 shadow-md"
-                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:text-gray-100"
+                      : "text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-100"
                   }`}
                 >
                   {m === "login" ? "Login" : "Sign Up"}
@@ -287,7 +287,7 @@ export default function Auth() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 transition-colors hover:text-gray-600 dark:text-gray-300"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 transition-colors hover:text-gray-600 dark:hover:text-gray-300"
                     aria-label="Toggle password visibility"
                   >
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}

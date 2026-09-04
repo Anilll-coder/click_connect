@@ -197,7 +197,7 @@ export default function Chatbot() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 space-y-6 overflow-y-auto bg-[#fafbff] p-5">
+        <div className="flex-1 space-y-6 overflow-y-auto bg-[#fafbff] dark:bg-slate-900/40 p-5">
           <AnimatePresence initial={false} mode="popLayout">
             {messages.length === 0 && (
               <motion.div

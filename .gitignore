@@ -12,3 +12,6 @@ __pycache__/
 *.pyc
 #static files
 static/
+#claude code local tooling
+.claude/
+.vite/
