@@ -42,8 +42,8 @@ MAX_OUTPUT_TOKENS = 1024
 FALLBACK_MODELS = [
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
 ]
 
 

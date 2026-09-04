@@ -23,31 +23,6 @@ export default function HomePage() {
   const token = getAuthToken();
   const authenticated = isLoggedIn();
 
-  async function editPost(postId, body) {
-    const res = await fetch(`${API_BASE}/posts/${postId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ body }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Failed to update post");
-    }
-    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body } : p)));
-  }
-
-  async function deletePost(postId) {
-    const res = await fetch(`${API_BASE}/posts/${postId}`, {
-      method: "DELETE",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Failed to delete post");
-    }
-    setPosts((prev) => prev.filter((p) => p.id !== postId));
-  }
-
   const keepNonAnonymous = (arr) =>
     Array.isArray(arr) ? arr.filter((p) => !isAnonymousTrue(p)) : [];
 
@@ -296,8 +271,6 @@ export default function HomePage() {
               fetchComments={fetchComments}
               setCommentInputs={setCommentInputs}
               onOpen={openPostModal}
-              onEdit={editPost}
-              onDelete={deletePost}
             />
           ))}
         </div>
@@ -338,11 +311,6 @@ export default function HomePage() {
         submitComment={submitComment}
         fetchComments={fetchComments}
         setCommentInputs={setCommentInputs}
-        onEdit={editPost}
-        onDelete={async (postId) => {
-          await deletePost(postId);
-          closePostModal();
-        }}
       />
     </div>
   );

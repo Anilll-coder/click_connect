@@ -345,13 +345,27 @@ def get_following_feed(
 
 
 @router.get("/me", summary="Get current user's posts (paginated)")
-def get_my_posts(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
+@limiter.limit("60/minute")
+def get_my_posts(
+    request: Request,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_current_user),
+):
     """
     Returns list of posts for the current user with media embedded.
     """
     base = str(request.base_url).rstrip("/")
-    posts = db.query(Post).filter(Post.author_id == current_user.id).order_by(Post.created_at.desc()).all()
-    
+    posts = (
+        db.query(Post)
+        .filter(Post.author_id == current_user.id)
+        .order_by(Post.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
     if not posts:
         return []
     
@@ -393,6 +407,7 @@ def get_my_posts(request: Request, db: Session = Depends(get_db), current_user: 
         out.append({
             "id": p.id,
             "body": p.body,
+            "is_anonymous": bool(getattr(p, "is_anonymous", False)),
             "created_at": p.created_at.isoformat(),
             "author": {
                 "id": current_user.id,

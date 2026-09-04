@@ -12,11 +12,14 @@ import {
   RefreshCw,
   Check,
   X,
+  Ghost,
 } from "lucide-react";
-import { API_BASE, getAuthToken, resolveAsset, timeAgo } from "../utils/helpers";
+import { API_BASE, getAuthToken, resolveAsset, timeAgo, isAnonymousTrue } from "../utils/helpers";
 import { EmptyState, PostSkeleton, ConfirmDialog } from "../components/ui";
 import { useToast } from "../components/toastContext";
 import PostModal from "../components/PostModal";
+
+const PAGE_LIMIT = 10;
 
 export default function MyPosts() {
   const token = getAuthToken();
@@ -24,6 +27,8 @@ export default function MyPosts() {
   const toast = useToast();
 
   const [posts, setPosts] = useState([]);
+  const [skip, setSkip] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
@@ -53,8 +58,10 @@ export default function MyPosts() {
       setLoadingMore(true);
     }
 
+    const skipVal = reset ? 0 : skip;
+
     try {
-      const res = await fetch(`${API_BASE}/posts/me`, {
+      const res = await fetch(`${API_BASE}/posts/me?skip=${skipVal}&limit=${PAGE_LIMIT}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.status === 401) {
@@ -65,6 +72,8 @@ export default function MyPosts() {
       if (!res.ok) throw new Error("Failed to fetch posts");
       const data = await res.json();
       setPosts((prev) => (reset ? data : [...prev, ...data]));
+      setSkip(skipVal + data.length);
+      setHasMore(data.length === PAGE_LIMIT);
     } catch (err) {
       setError(err.message || "Failed to load");
     } finally {
@@ -336,22 +345,39 @@ export default function MyPosts() {
 
   function PostCard({ post }) {
     const isLiked = !!post.liked_by_current_user;
+    const isAnon = isAnonymousTrue(post);
     return (
       <motion.article
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="card p-5 transition-shadow hover:shadow-md"
+        className={`card p-5 transition-shadow hover:shadow-md ${
+          isAnon ? "border-gray-300 bg-gray-50/60 dark:border-slate-600 dark:bg-slate-800/40" : ""
+        }`}
       >
         <div className="flex items-start gap-3">
-          <img
-            src={resolveAsset(post.author?.avatar_url)}
-            alt={post.author?.username || "me"}
-            className="h-11 w-11 shrink-0 rounded-full border border-gray-200 dark:border-slate-700 object-cover"
-          />
+          <div className="relative shrink-0">
+            <img
+              src={resolveAsset(post.author?.avatar_url)}
+              alt={post.author?.username || "me"}
+              className="h-11 w-11 rounded-full border border-gray-200 dark:border-slate-700 object-cover"
+            />
+            {isAnon && (
+              <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-gray-800 text-white ring-2 ring-white dark:ring-slate-800">
+                <Ghost className="h-3 w-3" />
+              </span>
+            )}
+          </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="font-semibold text-gray-800 dark:text-gray-100">{post.author?.username || "You"}</div>
+                <div className="flex items-center gap-1.5 font-semibold text-gray-800 dark:text-gray-100">
+                  <span>{post.author?.username || "You"}</span>
+                  {isAnon && (
+                    <span className="rounded-full bg-gray-200 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                      Anonymous
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-400 dark:text-gray-500">{timeAgo(post.created_at)}</div>
               </div>
               <div className="flex items-center gap-1.5">
@@ -540,7 +566,7 @@ export default function MyPosts() {
         </div>
       )}
 
-      {!loading && posts.length > 0 && (
+      {!loading && posts.length > 0 && hasMore && (
         <div className="text-center">
           <button
             onClick={() => fetchPosts(false)}
@@ -557,6 +583,9 @@ export default function MyPosts() {
             )}
           </button>
         </div>
+      )}
+      {!loading && posts.length > 0 && !hasMore && (
+        <p className="text-center text-xs text-gray-400 dark:text-gray-500">You've reached the end!</p>
       )}
 
       <PostModal
