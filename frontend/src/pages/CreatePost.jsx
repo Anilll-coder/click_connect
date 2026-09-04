@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Image as ImageIcon, Video, User, EyeOff, X, Send, Info } from "lucide-react";
 import { API_BASE } from "../utils/helpers";
+import { useToast } from "../components/toastContext";
 
 export default function PostCreator({ onPosted }) {
+  const toast = useToast();
   const [body, setBody] = useState("");
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
@@ -41,12 +43,42 @@ export default function PostCreator({ onPosted }) {
   function onFilesChange(e) {
     const chosen = Array.from(e.target.files || []);
     if (!chosen.length) return;
+
+    if (isAnonymous) {
+      const videos = chosen.filter((f) => f.type.startsWith("video"));
+      if (videos.length > 0) {
+        toast.error("Anonymous posts can only include images, not videos.");
+      }
+      const imagesOnly = chosen.filter((f) => !f.type.startsWith("video"));
+      if (imagesOnly.length === 0) {
+        e.target.value = null;
+        return;
+      }
+      setFiles((prev) => [...prev, ...imagesOnly]);
+      e.target.value = null;
+      return;
+    }
+
     setFiles((prev) => [...prev, ...chosen]);
     e.target.value = null;
   }
 
   function removeFile(index) {
     setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function toggleAnonymous() {
+    setIsAnonymous((prev) => {
+      const next = !prev;
+      if (next) {
+        setFiles((current) => {
+          const hadVideo = current.some((f) => f.type.startsWith("video"));
+          if (hadVideo) toast.error("Videos were removed — anonymous posts can only include images.");
+          return current.filter((f) => !f.type.startsWith("video"));
+        });
+      }
+      return next;
+    });
   }
 
   async function submitPost(e) {
@@ -196,7 +228,7 @@ export default function PostCreator({ onPosted }) {
                 Media
                 <input
                   type="file"
-                  accept="image/*,video/*"
+                  accept={isAnonymous ? "image/*" : "image/*,video/*"}
                   multiple
                   onChange={onFilesChange}
                   className="hidden"
@@ -205,7 +237,7 @@ export default function PostCreator({ onPosted }) {
 
               <button
                 type="button"
-                onClick={() => setIsAnonymous(!isAnonymous)}
+                onClick={toggleAnonymous}
                 className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
                   isAnonymous
                     ? "bg-gray-900 text-white shadow-lg shadow-gray-900/20"
@@ -235,6 +267,12 @@ export default function PostCreator({ onPosted }) {
               )}
             </button>
           </div>
+
+          {isAnonymous && (
+            <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+              Anonymous posts can only include images — video isn't supported for anonymous posting.
+            </p>
+          )}
         </div>
       </motion.form>
     </div>

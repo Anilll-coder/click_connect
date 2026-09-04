@@ -654,6 +654,11 @@ async def create_post(
                 db.commit()
                 raise HTTPException(status_code=400, detail=str(e))
 
+            if is_anonymous and kind == "video":
+                db.delete(post)
+                db.commit()
+                raise HTTPException(status_code=400, detail="Anonymous posts can only include images, not videos")
+
             try:
                 if kind == "image":
                     url = save_image(data, f.content_type)

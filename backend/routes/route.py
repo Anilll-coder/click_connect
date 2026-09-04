@@ -36,6 +36,16 @@ SYSTEM_PROMPT = (
 MAX_QUERY_LENGTH = 2000
 MAX_OUTPUT_TOKENS = 1024
 
+# Tried in order; free-tier Gemini models only. If one errors out (quota,
+# transient outage, timeout, etc.) we fall through to the next rather than
+# failing the request outright.
+FALLBACK_MODELS = [
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+]
+
 
 class ChatRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=MAX_QUERY_LENGTH)
@@ -57,18 +67,28 @@ def chatbot(
     Auth + rate limiting exist specifically to stop anonymous callers from
     draining the (paid) Gemini quota; the frontend never talks to Gemini
     directly and the API key never leaves this server.
-    """
-    try:
-        response = client.models.generate_content(
-            model="gemini-flash-latest",
-            contents=payload.query,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                max_output_tokens=MAX_OUTPUT_TOKENS,
-            ),
-        )
-        return ChatResponse(reply=response.text or "")
 
-    except Exception:
-        logger.exception("Gemini request failed for user_id=%s", current_user.id)
-        raise HTTPException(status_code=502, detail="AI assistant is temporarily unavailable. Please try again.")
+    Tries each model in FALLBACK_MODELS in turn — if one errors (quota
+    exhausted, transient outage, timeout), the next free model is tried
+    before giving up.
+    """
+    last_error = None
+    for model_name in FALLBACK_MODELS:
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=payload.query,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
+                ),
+            )
+            if model_name != FALLBACK_MODELS[0]:
+                logger.info("Gemini fallback model succeeded: model=%s user_id=%s", model_name, current_user.id)
+            return ChatResponse(reply=response.text or "")
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Gemini model failed, trying next: model=%s user_id=%s error=%s", model_name, current_user.id, exc)
+
+    logger.error("All Gemini fallback models failed for user_id=%s", current_user.id, exc_info=last_error)
+    raise HTTPException(status_code=502, detail="AI assistant is temporarily unavailable. Please try again.")
