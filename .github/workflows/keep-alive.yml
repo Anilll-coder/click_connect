@@ -1,0 +1,16 @@
+name: Keep Render App Awake
+
+on:
+  schedule:
+    # Runs every 10 minutes (Render free tier spins down after 15 min of inactivity)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}  # lets you trigger it manually from the Actions tab too
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping app to keep it awake
+        run: |
+          echo "Pinging https://click-connect-1.onrender.com/ at $(date)"
+          curl --fail --silent --show-error --max-time 30 https://click-connect-1.onrender.com/
