@@ -13,10 +13,9 @@ from models.models import Post, PostMedia, User, Like, Comment, Follow, Bookmark
 from utils.ratelimit import limiter
 from utils.hashtags import extract_hashtags
 from routes.moderation import get_blocked_user_ids
+from schemas.schemas import PostUpdate, MAX_POST_BODY_LENGTH
 
 logger = logging.getLogger("clickconnect.posts")
-
-MAX_POST_BODY_LENGTH = 5000
 
 router = APIRouter(prefix="/posts", tags=["posts.me"])
 
@@ -741,9 +740,9 @@ async def create_post(
 
 @router.put("/{post_id}", summary="Update a post body (owner only)")
 @limiter.limit("20/minute")
-def update_post(post_id: int, payload: dict, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
+def update_post(post_id: int, payload: PostUpdate, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_current_user)):
     """
-    Expects JSON body: { "body": "new text" }.
+    Expects JSON body: { "body": "new text" } (validated by PostUpdate).
     Only the author can edit.
     Returns updated post object.
     """
@@ -754,13 +753,7 @@ def update_post(post_id: int, payload: dict, request: Request, db: Session = Dep
     if post.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed")
 
-    new_body = payload.get("body", "") if isinstance(payload, dict) else ""
-    if not isinstance(new_body, str) or not new_body.strip():
-        raise HTTPException(status_code=400, detail="Invalid body")
-    if len(new_body) > MAX_POST_BODY_LENGTH:
-        raise HTTPException(status_code=400, detail=f"Post body must be at most {MAX_POST_BODY_LENGTH} characters")
-
-    post.body = new_body.strip()
+    post.body = payload.body  # already stripped and length-checked
     db.add(post)
     db.commit()
     db.refresh(post)

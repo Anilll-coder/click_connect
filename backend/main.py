@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +34,17 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
     if retry_after:
         response.headers["Retry-After"] = str(int(retry_after))
     return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(request: Request, exc: RequestValidationError):
+    # FastAPI's default puts a list of error objects in "detail", but the
+    # frontend shows err.detail as a message. Return the first error as a
+    # readable string instead (status stays 422).
+    errors = exc.errors()
+    msg = errors[0].get("msg", "Invalid request") if errors else "Invalid request"
+    msg = msg.removeprefix("Value error, ")
+    return JSONResponse(status_code=422, content={"detail": msg})
 
 
 origins = ["https://click-connect-1.onrender.com"]
