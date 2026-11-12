@@ -762,8 +762,14 @@ def update_post(post_id: int, payload: dict, request: Request, db: Session = Dep
 
     post.body = new_body.strip()
     db.add(post)
+    # Re-sync hashtags with the new text: drop old links, then re-link.
+    # Anonymous posts are never linked (the hashtag feed shows the author).
+    db.query(PostHashtag).filter(PostHashtag.post_id == post.id).delete(synchronize_session=False)
     db.commit()
     db.refresh(post)
+    if not getattr(post, "is_anonymous", False):
+        _link_hashtags(db, post)
+        db.refresh(post)
 
     # serialize response similar to GET /posts/me
     media = [{"id": m.id, "url": m.url, "media_type": m.media_type, "order": m.order} for m in post.media]
