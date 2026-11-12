@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -35,6 +35,21 @@ class UserOut(BaseModel):
 class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+MAX_POST_BODY_LENGTH = 5000
+
+
+class PostUpdate(BaseModel):
+    body: str = Field(..., max_length=MAX_POST_BODY_LENGTH)
+
+    @field_validator("body")
+    @classmethod
+    def body_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Post body cannot be empty")
+        return v
 
 
 class CommentCreate(BaseModel):
