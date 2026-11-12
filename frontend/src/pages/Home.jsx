@@ -108,6 +108,24 @@ export default function HomePage() {
     [token, authenticated]
   );
 
+  // Passed to PostCard as onEdit. PostCard only shows "Edit" when the API
+  // marks the post is_owner; the backend still enforces author-only (403).
+  // Must throw on failure so PostCard can show an error toast.
+  async function editPost(postId, body) {
+    const res = await fetch(`${API_BASE}/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || "Failed to update post");
+    }
+    const updated = await res.json();
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, body: updated.body } : p)));
+    setSelectedPost((prev) => (prev && prev.id === postId ? { ...prev, body: updated.body } : prev));
+  }
+
   async function fetchComments(postId, more = false) {
     setCommentsMap((m) => ({ ...(m || {}), [postId]: { ...(m?.[postId] || {}), loading: true } }));
     const current = commentsMap[postId] || { items: [], skip: 0 };
@@ -271,6 +289,7 @@ export default function HomePage() {
               fetchComments={fetchComments}
               setCommentInputs={setCommentInputs}
               onOpen={openPostModal}
+              onEdit={editPost}
             />
           ))}
         </div>
@@ -311,6 +330,7 @@ export default function HomePage() {
         submitComment={submitComment}
         fetchComments={fetchComments}
         setCommentInputs={setCommentInputs}
+        onEdit={editPost}
       />
     </div>
   );

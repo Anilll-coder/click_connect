@@ -6,7 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(),tailwindcss()],
   server: {
-  host: "0.0.0.0",
-  allowedHosts: true,
-},
+    host: "0.0.0.0",
+    // Read PORT in Node instead of the shell so `npm run dev` works on
+    // Windows (PowerShell/cmd) as well as bash. Falls back to 5173.
+    port: Number(process.env.PORT) || 5173,
+    allowedHosts: true,
+  },
 })
